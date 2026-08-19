@@ -569,6 +569,7 @@ workspace "YGOPro"
 
     include "ocgcore"
     include "gframe"
+    include "tests"
     if BUILD_LUA then
         include "lua"
     end

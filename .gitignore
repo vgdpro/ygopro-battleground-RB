@@ -47,3 +47,6 @@
 /gframe/ygopro.aps
 /premake5
 /premake5.exe
+/tests
+/knowledge-base
+CHAT-PROMPTS.zh-CN.md
