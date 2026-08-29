@@ -74,6 +74,7 @@ namespace ygo
         mainGame->dInfo.tag_player[1] = false;
         set_script_reader(DataManager::ScriptReaderEx);
         set_card_reader(DataManager::CardReader);
+        set_random_card_reader(DataManager::RandomCardReader);
         set_message_handler(ReplayMode::MessageHandler);
         if (!StartDuel())
         {

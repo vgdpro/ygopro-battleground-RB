@@ -9,6 +9,8 @@ argument-hint: "Task or behavior to analyze"
 
 Use the local `knowledge-base/` files before you inspect implementation details.
 
+For battleground tasks, read `battleground-roadmap.md` first for the current task, dependencies, status, and acceptance criteria. Use `battleground-design.md` for architecture, `battleground-tech.md` for implementation facts, and `task-numbering.md` only for numbering rules or legacy mappings. Treat `memories/` as a non-authoritative recovery summary.
+
 For the requested task:
 
 1. Identify which knowledge-base files matter.

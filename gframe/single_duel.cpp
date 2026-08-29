@@ -37,6 +37,18 @@ namespace ygo
             NetServer::ReSendToPlayer(replay_recorder);
 #endif
     }
+    void SingleDuel::AbortDuelWithChat(const char16_t *message)
+    {
+        unsigned char scc[SIZE_STOC_CHAT];
+        const auto message_size = static_cast<int>((std::char_traits<char16_t>::length(message) + 1) * sizeof(char16_t));
+        const auto scc_size = NetServer::CreateSystemChatPacket(reinterpret_cast<const unsigned char *>(message), message_size, scc);
+        if (scc_size)
+        {
+            NetServer::SendBufferToPlayer(players[0], STOC_CHAT, scc, scc_size);
+            NetServer::ReSendToPlayer(players[1]);
+        }
+        EndDuel();
+    }
     void SingleDuel::JoinGame(DuelPlayer *dp, unsigned char *pdata, bool is_creater)
     {
 #ifdef YGOPRO_SERVER_MODE
@@ -646,6 +658,7 @@ namespace ygo
         time_limit[1] = host_info.time_limit;
         set_script_reader(DataManager::ScriptReaderEx);
         set_card_reader(DataManager::CardReader);
+        set_random_card_reader(DataManager::RandomCardReader);
         set_message_handler(SingleDuel::MessageHandler);
         pduel = create_duel_v2(rh.seed_sequence);
         set_player_info(pduel, 0, host_info.start_lp, host_info.start_hand, host_info.draw_count);
@@ -671,9 +684,11 @@ namespace ygo
             }
         };
         // Field 0: only player 0 deck
+        set_active_field(pduel, 0);
         load(pdeck[0].main, 0, 0, LOCATION_DECK);
         load(pdeck[0].extra, 0, 0, LOCATION_EXTRA);
         // Field 1: only player 1 deck (player 0 in field 1)
+        set_active_field(pduel, 1);
         load(pdeck[1].main, 1, 0, LOCATION_DECK);
         load(pdeck[1].extra, 1, 0, LOCATION_EXTRA);
         last_replay.Flush();
@@ -720,8 +735,6 @@ namespace ygo
             unsigned int result = process(pduel);
             engLen = result & PROCESSOR_BUFFER_LEN;
             engFlag = result & PROCESSOR_FLAG;
-            fprintf(stderr, "[DEBUG] Process() loop: result=0x%x engFlag=0x%x engLen=%d stop=%d\n", result, engFlag, engLen, stop);
-            fflush(stderr);
             if (engLen > 0)
             {
                 if (engLen > (int)engineBuffer.size())
@@ -940,6 +953,57 @@ namespace ygo
                     break;
                 }
                 }
+                break;
+            }
+            case MSG_CUSTOM_CHAT:
+            {
+                const size_t remaining = len - static_cast<size_t>(pbuf - msgbuffer);
+                if (remaining < 2)
+                    return -1;
+                player = BufferIO::Read<uint8_t>(pbuf);
+                count = BufferIO::Read<uint8_t>(pbuf);
+                if (player > 1 || count == 0 || remaining - 2 < static_cast<size_t>(count) * sizeof(uint16_t))
+                    return -1;
+                std::wstring message;
+                for (int i = 0; i < count; ++i)
+                {
+                    const auto id = BufferIO::Read<uint16_t>(pbuf);
+                    message.append(dataManager.GetSysString(id));
+                }
+                if (!IsBattleField() && player != 0)
+                    break;
+                uint16_t message_utf16[LEN_CHAT_MSG]{};
+                size_t utf16_length = 0;
+                bool message_too_long = false;
+                for (const wchar_t character : message)
+                {
+                    const uint32_t codepoint = static_cast<uint32_t>(character);
+                    const size_t code_unit_count = codepoint <= 0xffff ? 1 : codepoint <= 0x10ffff ? 2
+                                                                                                   : 0;
+                    if (utf16_length + code_unit_count >= LEN_CHAT_MSG)
+                    {
+                        message_too_long = true;
+                        break;
+                    }
+                    if (code_unit_count == 1)
+                    {
+                        message_utf16[utf16_length++] = static_cast<uint16_t>(codepoint);
+                    }
+                    else if (code_unit_count == 2)
+                    {
+                        const uint32_t surrogate = codepoint - 0x10000;
+                        message_utf16[utf16_length++] = static_cast<uint16_t>(0xd800 + (surrogate >> 10));
+                        message_utf16[utf16_length++] = static_cast<uint16_t>(0xdc00 + (surrogate & 0x3ff));
+                    }
+                }
+                if (message_too_long)
+                    break;
+                unsigned char scc[SIZE_STOC_CHAT];
+                const auto message_size = static_cast<int>((utf16_length + 1) * sizeof(uint16_t));
+                const auto scc_size = NetServer::CreateSystemChatPacket(reinterpret_cast<const unsigned char *>(message_utf16), message_size, scc);
+                if (!scc_size)
+                    break;
+                NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_CHAT, scc, scc_size);
                 break;
             }
             case MSG_WIN:
@@ -1434,13 +1498,20 @@ namespace ygo
 #ifdef YGOPRO_SERVER_MODE
             case MSG_CHANGE_FIELD:
             {
-                if (active_field != 2)
+                if (!IsBattleField())
                 {
                     if (able_to_bp)
                     {
-                        merge_field_to_bp(pduel);
-                        set_active_field(pduel, 2);
-                        active_field = 2;
+                        const uint8_t battle_field = 4;
+                        const uint8_t battle_turn_player = battle_turn_counter % 2;
+                        set_active_field(pduel, battle_field);
+                        if (merge_field_to_bp(pduel, battle_field, 0, 1, battle_turn_player) != TRUE)
+                        {
+                            AbortDuelWithChat(u"merge_field_to_bp failed; duel terminated.");
+                            return 2;
+                        }
+                        ++battle_turn_counter;
+                        active_field = battle_field;
                         Process();
                     }
                     able_to_bp = true;
@@ -1448,6 +1519,12 @@ namespace ygo
                 else
                 {
                     able_to_bp = false;
+                    set_active_field(pduel, 4);
+                    if (return_field_to_main(pduel, 4) != TRUE)
+                    {
+                        AbortDuelWithChat(u"return_field_to_main failed; duel terminated.");
+                        return 2;
+                    }
                     set_active_field(pduel, 0);
                     active_field = 0;
                     Process();
@@ -1456,6 +1533,18 @@ namespace ygo
                     Process();
                 }
                 return 1;
+            }
+            case MSG_BATTLEGROUND_FATAL:
+            {
+                const size_t remaining = len - static_cast<size_t>(pbuf - msgbuffer);
+                if (remaining < 1)
+                    return -1;
+                const auto reason = BufferIO::Read<uint8_t>(pbuf);
+                if (reason == BATTLEGROUND_FATAL_RETURN_FIELD)
+                    AbortDuelWithChat(u"return_field_to_main failed; duel terminated.");
+                else
+                    AbortDuelWithChat(u"Battleground internal error; duel terminated.");
+                return 2;
             }
 #endif
             case MSG_NEW_PHASE:
@@ -1965,33 +2054,38 @@ namespace ygo
 #ifdef YGOPRO_SERVER_MODE
             case MSG_FIELD_READY:
             {
+                const auto turn_player_from_engine = BufferIO::Read<uint8_t>(pbuf);
+                const auto lp0 = BufferIO::Read<uint8_t>(pbuf);
+                const auto lp1 = BufferIO::Read<uint8_t>(pbuf);
+                const uint8_t ready_field = active_field;
                 // engine 信号：field 初始化完成，构建并发送 MSG_START
                 unsigned char startbuf[32]{};
                 auto pbuf = startbuf;
                 BufferIO::Write<uint8_t>(pbuf, MSG_START);
                 BufferIO::Write<uint8_t>(pbuf, 0);
                 BufferIO::Write<uint8_t>(pbuf, host_info.duel_rule);
-                BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
-                BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
+                BufferIO::Write<int32_t>(pbuf, lp0);
+                BufferIO::Write<int32_t>(pbuf, lp1);
                 if (!IsBattleField())
                 {
                     // 非战斗场：只发本 field 家园主，对手数据填 0
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, active_field, 0, LOCATION_DECK));
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, active_field, 0, LOCATION_EXTRA));
+                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 0, LOCATION_DECK));
+                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 0, LOCATION_EXTRA));
                     BufferIO::Write<uint16_t>(pbuf, 0);
                     BufferIO::Write<uint16_t>(pbuf, 0);
-                    NetServer::SendBufferToPlayer(players[active_field], STOC_GAME_MSG, startbuf, 19);
+                    NetServer::SendBufferToPlayer(players[ready_field], STOC_GAME_MSG, startbuf, 19);
                 }
                 else
                 {
-                    // 战斗场：正常决斗语义，双方各自看到正确先后攻
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 2, 0, LOCATION_DECK));
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 2, 0, LOCATION_EXTRA));
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 2, 1, LOCATION_DECK));
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 2, 1, LOCATION_EXTRA));
-                    NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, startbuf, 19);
-                    startbuf[1] = 1;
-                    NetServer::SendBufferToPlayer(players[1], STOC_GAME_MSG, startbuf, 19);
+                    // 战斗场：使用 engine 计算的 turn_player
+                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 0, LOCATION_DECK));
+                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 0, LOCATION_EXTRA));
+                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 1, LOCATION_DECK));
+                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 1, LOCATION_EXTRA));
+                    startbuf[1] = turn_player_from_engine;
+                    NetServer::SendBufferToPlayer(players[turn_player_from_engine], STOC_GAME_MSG, startbuf, 19);
+                    startbuf[1] = 1 - turn_player_from_engine;
+                    NetServer::SendBufferToPlayer(players[1 - turn_player_from_engine], STOC_GAME_MSG, startbuf, 19);
                 }
                 // observers/recorders 始终发送
                 for (auto oit = observers.begin(); oit != observers.end(); ++oit)
@@ -2000,7 +2094,105 @@ namespace ygo
                     NetServer::SendBufferToPlayer(cache_recorder, STOC_GAME_MSG, startbuf, 19);
                 if (replay_recorder)
                     NetServer::SendBufferToPlayer(replay_recorder, STOC_GAME_MSG, startbuf, 19);
-                RefreshExtra(0);
+                // 全量刷新：参考 RequestField 刷新双方所有区域
+                {
+                    uint8_t refresh_buf[1024];
+                    auto write_refresh_msg = [&](const std::function<void(uint8_t *&)> &writer, DuelPlayer *target)
+                    {
+                        uint8_t *pbuf = refresh_buf;
+                        writer(pbuf);
+                        NetServer::SendBufferToPlayer(target, STOC_GAME_MSG, refresh_buf, pbuf - refresh_buf);
+                    };
+                    auto send_deck_top = [&](uint8_t field, DuelPlayer *target)
+                    {
+                        uint8_t query_buffer[SIZE_QUERY_BUFFER];
+                        for (uint8_t i = 0; i < 2; ++i)
+                        {
+                            auto qlen = query_field_card(pduel, field, i, LOCATION_DECK, QUERY_CODE | QUERY_POSITION, query_buffer, 0);
+                            if (!qlen)
+                                continue;
+                            uint8_t *qbuf = query_buffer;
+                            uint32_t code = 0;
+                            uint32_t position = 0;
+                            while (qbuf < query_buffer + qlen)
+                            {
+                                auto clen = BufferIO::Read<int32_t>(qbuf);
+                                if (qbuf + clen - 4 == query_buffer + qlen)
+                                {
+                                    code = *(uint32_t *)(qbuf + 4);
+                                    position = GetPosition(qbuf, 8);
+                                }
+                                qbuf += clen - 4;
+                            }
+                            if (position & POS_FACEUP)
+                                code |= 0x80000000;
+                            if (deck_reversed || position & POS_FACEUP)
+                                write_refresh_msg([&](uint8_t *&wpbuf)
+                                                  {
+                                    BufferIO::Write<uint8_t>(wpbuf, MSG_DECK_TOP);
+                                    BufferIO::Write<uint8_t>(wpbuf, i);
+                                    BufferIO::Write<uint8_t>(wpbuf, 0);
+                                    BufferIO::Write<int32_t>(wpbuf, code); }, target);
+                        }
+                    };
+                    if (!IsBattleField())
+                    {
+                        // 非战斗场：刷新双方数据，只发给本 field 家园主
+                        auto target = players[ready_field];
+                        // query_field_info
+                        {
+                            uint8_t qfi_buf[SIZE_QUERY_BUFFER];
+                            auto len = query_field_info(pduel, ready_field, qfi_buf);
+                            NetServer::SendBufferToPlayer(target, STOC_GAME_MSG, qfi_buf, len);
+                        }
+                        RefreshMzone(0, 0xefffff, 0, ready_field);
+                        RefreshMzone(1, 0xefffff, 0, ready_field);
+                        RefreshSzone(0, 0xefffff, 0, ready_field);
+                        RefreshSzone(1, 0xefffff, 0, ready_field);
+                        RefreshHand(0, 0xefffff, 0, ready_field);
+                        RefreshHand(1, 0xefffff, 0, ready_field);
+                        RefreshGrave(0, 0xefffff, 0, ready_field);
+                        RefreshGrave(1, 0xefffff, 0, ready_field);
+                        RefreshExtra(0, 0xefffff, 0, ready_field);
+                        RefreshExtra(1, 0xefffff, 0, ready_field);
+                        RefreshRemoved(0, 0xefffff, 0, ready_field);
+                        RefreshRemoved(1, 0xefffff, 0, ready_field);
+                        if (deck_reversed)
+                            write_refresh_msg([&](uint8_t *&wpbuf)
+                                              { BufferIO::Write<uint8_t>(wpbuf, MSG_REVERSE_DECK); }, target);
+                        send_deck_top(ready_field, target);
+                    }
+                    else
+                    {
+                        // 战斗场：分别发给双方玩家
+                        for (uint8_t p = 0; p < 2; ++p)
+                        {
+                            auto target = players[p];
+                            // query_field_info
+                            {
+                                uint8_t qfi_buf[SIZE_QUERY_BUFFER];
+                                auto len = query_field_info(pduel, ready_field, qfi_buf);
+                                NetServer::SendBufferToPlayer(target, STOC_GAME_MSG, qfi_buf, len);
+                            }
+                            RefreshMzone(0, 0xefffff, 0, ready_field, target);
+                            RefreshMzone(1, 0xefffff, 0, ready_field, target);
+                            RefreshSzone(0, 0xefffff, 0, ready_field, target);
+                            RefreshSzone(1, 0xefffff, 0, ready_field, target);
+                            RefreshHand(0, 0xefffff, 0, ready_field, target);
+                            RefreshHand(1, 0xefffff, 0, ready_field, target);
+                            RefreshGrave(0, 0xefffff, 0, ready_field, target);
+                            RefreshGrave(1, 0xefffff, 0, ready_field, target);
+                            RefreshExtra(0, 0xefffff, 0, ready_field, target);
+                            RefreshExtra(1, 0xefffff, 0, ready_field, target);
+                            RefreshRemoved(0, 0xefffff, 0, ready_field, target);
+                            RefreshRemoved(1, 0xefffff, 0, ready_field, target);
+                            if (deck_reversed)
+                                write_refresh_msg([&](uint8_t *&wpbuf)
+                                                  { BufferIO::Write<uint8_t>(wpbuf, MSG_REVERSE_DECK); }, target);
+                            send_deck_top(ready_field, target);
+                        }
+                    }
+                }
                 break;
             }
 #endif
@@ -2035,7 +2227,7 @@ namespace ygo
 #ifdef YGOPRO_SERVER_MODE
         fprintf(stderr, "[DEBUG] GetResponse ENTER: dp->type=%d active_field=%d len=%u\n", (int)dp->type, (int)active_field, len);
         fflush(stderr);
-        if (dp->type <= 1 && active_field != 2)
+        if (dp->type <= 1 && !IsBattleField())
         {
             set_active_field(pduel, dp->type);
             active_field = dp->type;
@@ -2284,7 +2476,7 @@ namespace ygo
 #ifdef YGOPRO_SERVER_MODE
     inline bool SingleDuel::IsBattleField() const
     {
-        return active_field == 2;
+        return active_field == 4 || active_field == 5;
     }
     void SingleDuel::RefreshMzone(int player, int flag, int use_cache, int field, DuelPlayer *dp)
 #else

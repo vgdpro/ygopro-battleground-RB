@@ -18,6 +18,10 @@ When a task is not trivial, inspect the most relevant files in this order:
 2. The most relevant topic file under `knowledge-base/`
 3. The nearest implementation files and tests in the repository
 
+> 战旗玩法与平衡讨论参考 `knowledge-base/battleground-game-design.md`；技术架构参考 `knowledge-base/battleground-design.md`；里程碑、任务、依赖、状态和验收标准以 `knowledge-base/battleground-roadmap.md` 为唯一权威；接口、实现细节、风险和验证证据参考 `knowledge-base/battleground-tech.md`；编号规则与旧编号映射参考 `knowledge-base/task-numbering.md`。
+> 文档编辑规范参考 `knowledge-base/doc-standards.md`。
+> `memories/` 只用于快速恢复上下文，不得覆盖知识库中的任务状态、架构或玩法结论。
+
 ## Working Style
 
 - Work in small, reviewable increments.

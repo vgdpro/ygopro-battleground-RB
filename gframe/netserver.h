@@ -37,7 +37,8 @@ namespace ygo
         static int ServerThread();
         static void DisconnectPlayer(DuelPlayer *dp);
         static void HandleCTOSPacket(DuelPlayer *dp, unsigned char *data, size_t len);
-        static size_t CreateChatPacket(unsigned char *src, int src_size, unsigned char *dst, uint16_t dst_player_type);
+        static size_t CreateChatPacket(const unsigned char *src, int src_size, unsigned char *dst, uint16_t dst_player_type);
+        static size_t CreateSystemChatPacket(const unsigned char *src, int src_size, unsigned char *dst);
         static inline bool ShouldHideFacedownCode(uint8_t position)
         {
             return (position & POS_FACEDOWN) != 0 && (position & POS_REVEAL) == 0;
@@ -74,8 +75,6 @@ namespace ygo
         }
         static void SendBufferToPlayer(DuelPlayer *dp, unsigned char proto, void *buffer, size_t len)
         {
-            printf("[SEND] dp->type=%d proto=%d(0x%x) caller=0x%p\n", dp ? dp->type : -1, proto, proto, _ReturnAddress());
-            fflush(stdout);
             auto p = net_server_write;
             if (len > MAX_DATA_SIZE)
                 len = MAX_DATA_SIZE;

@@ -3,6 +3,7 @@
 /deck
 
 /data
+/cache/
 
 .DS_Store
 

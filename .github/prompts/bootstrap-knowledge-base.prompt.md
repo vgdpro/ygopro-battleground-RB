@@ -23,6 +23,9 @@ Requirements:
 - Call out uncertainty when the repository does not provide enough evidence.
 - Prefer practical guidance that future agents can act on.
 - If a knowledge-base file already contains useful curated content, preserve and refine it instead of replacing it blindly.
+- Preserve the battleground authority split: game design for player rules, design for architecture, roadmap for tasks/status/acceptance, tech for implementation evidence, and task-numbering for numbering rules and legacy mappings.
+- Do not regenerate task tables in `battleground-game-design.md`, `battleground-tech.md`, or `task-numbering.md`.
+- Check whether the compact `memories/ygopro-battleground-mode.md` recovery summary needs synchronization, but never let memory override knowledge-base facts.
 
 Minimum output:
 

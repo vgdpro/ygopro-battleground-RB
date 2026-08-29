@@ -1,2 +1,628 @@
 === ygopro-battleground-RB debug log (startup) ===
 7911
+[DEBUG] set_active_field: 0->0 new game_field=0000000001084220 temp_card=0000000000F474D0
+[DEBUG] set_active_field: 0->1 new game_field=0000000000D8EFF0 temp_card=0000000000D93FE0
+[DEBUG] set_active_field: 1->2 new game_field=0000000000D985E0 temp_card=0000000000D9AB00
+[DEBUG] set_active_field: 2->3 new game_field=0000000000DA3100 temp_card=0000000000DA7630
+[DEBUG] set_active_field: 3->0 new game_field=0000000001084220 temp_card=0000000000F474D0
+[DEBUG] TPDuel::Process: before Process() field 0
+[DEBUG] field::process() type=6 step=0 units=2
+[DEBUG] before get_message engLen=4
+[DEBUG] after get_message, msgType=0xc8, before Analyze
+[DEBUG] Analyze: engType=200
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=0 units=1
+[DEBUG] before get_message engLen=2
+[DEBUG] after get_message, msgType=0x28, before Analyze
+[DEBUG] Analyze: engType=40
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=1 step=0 units=2
+[DEBUG] field::process() type=1 step=1 units=2
+[DEBUG] field::process() type=1 step=2 units=2
+[DEBUG] field::process() type=5 step=0 units=3
+[DEBUG] field::process() type=5 step=1 units=3
+[DEBUG] field::process() type=5 step=3 units=3
+[DEBUG] field::process() type=5 step=5 units=3
+[DEBUG] field::process() type=5 step=7 units=3
+[DEBUG] field::process() type=1 step=3 units=2
+[DEBUG] field::process() type=1 step=4 units=2
+[DEBUG] field::process() type=1 step=5 units=2
+[DEBUG] field::process() type=1 step=8 units=2
+[DEBUG] field::process() type=1 step=9 units=2
+[DEBUG] field::process() type=1 step=10 units=2
+[DEBUG] field::process() type=1 step=11 units=2
+[DEBUG] field::process() type=1 step=12 units=2
+[DEBUG] field::process() type=1 step=13 units=2
+[DEBUG] field::process() type=1 step=14 units=2
+[DEBUG] field::process() type=1 step=15 units=2
+[DEBUG] field::process() type=1 step=16 units=2
+[DEBUG] field::process() type=3 step=1 units=1
+[DEBUG] before get_message engLen=10
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] Analyze: engType=2
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=2 units=1
+[DEBUG] before get_message engLen=7
+[DEBUG] after get_message, msgType=0x39, before Analyze
+[DEBUG] Analyze: engType=57
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=70 step=0 units=3
+[DEBUG] before get_message engLen=23
+[DEBUG] after get_message, msgType=0x5a, before Analyze
+[DEBUG] Analyze: engType=90
+[DEBUG] MSG_DRAW: engine_player=0 active_field=0 IsBattleField=0
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=70 step=1 units=3
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=20 units=2
+[DEBUG] field::process() type=33 step=25 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=33 step=26 units=2
+[DEBUG] field::process() type=3 step=3 units=1
+[DEBUG] field::process() type=3 step=4 units=1
+[DEBUG] before get_message engLen=3
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=5 units=1
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=20 units=2
+[DEBUG] field::process() type=33 step=25 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=33 step=26 units=2
+[DEBUG] field::process() type=3 step=6 units=1
+[DEBUG] field::process() type=1 step=0 units=2
+[DEBUG] field::process() type=1 step=1 units=2
+[DEBUG] field::process() type=1 step=2 units=2
+[DEBUG] field::process() type=5 step=0 units=3
+[DEBUG] field::process() type=5 step=1 units=3
+[DEBUG] field::process() type=5 step=3 units=3
+[DEBUG] field::process() type=5 step=5 units=3
+[DEBUG] field::process() type=5 step=7 units=3
+[DEBUG] field::process() type=1 step=3 units=2
+[DEBUG] field::process() type=1 step=4 units=2
+[DEBUG] field::process() type=1 step=5 units=2
+[DEBUG] field::process() type=1 step=8 units=2
+[DEBUG] field::process() type=1 step=9 units=2
+[DEBUG] field::process() type=1 step=10 units=2
+[DEBUG] field::process() type=1 step=11 units=2
+[DEBUG] field::process() type=1 step=12 units=2
+[DEBUG] field::process() type=1 step=13 units=2
+[DEBUG] field::process() type=1 step=14 units=2
+[DEBUG] field::process() type=1 step=15 units=2
+[DEBUG] field::process() type=1 step=16 units=2
+[DEBUG] field::process() type=3 step=7 units=1
+[DEBUG] before get_message engLen=3
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=32 step=0 units=2
+[DEBUG] field::process() type=10 step=0 units=3
+[DEBUG] before get_message engLen=96
+[DEBUG] after get_message, msgType=0xb, before Analyze
+[DEBUG] Analyze: engType=11
+[DEBUG] WaitforResponse: playerid=0 active_field=0
+[DEBUG] WaitforResponseAfterRewrite: playerid=0 active_field=0
+[DEBUG] after Analyze, stop=1
+[DEBUG] set_active_field: 0->1 new game_field=0000000000D8EFF0 temp_card=0000000000D93FE0
+[DEBUG] TPDuel::Process: before Process() field 1
+[DEBUG] field::process() type=6 step=0 units=2
+[DEBUG] before get_message engLen=4
+[DEBUG] after get_message, msgType=0xc8, before Analyze
+[DEBUG] Analyze: engType=200
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=0 units=1
+[DEBUG] before get_message engLen=2
+[DEBUG] after get_message, msgType=0x28, before Analyze
+[DEBUG] Analyze: engType=40
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=1 step=0 units=2
+[DEBUG] field::process() type=1 step=1 units=2
+[DEBUG] field::process() type=1 step=2 units=2
+[DEBUG] field::process() type=5 step=0 units=3
+[DEBUG] field::process() type=5 step=1 units=3
+[DEBUG] field::process() type=5 step=3 units=3
+[DEBUG] field::process() type=5 step=5 units=3
+[DEBUG] field::process() type=5 step=7 units=3
+[DEBUG] field::process() type=1 step=3 units=2
+[DEBUG] field::process() type=1 step=4 units=2
+[DEBUG] field::process() type=1 step=5 units=2
+[DEBUG] field::process() type=1 step=8 units=2
+[DEBUG] field::process() type=1 step=9 units=2
+[DEBUG] field::process() type=1 step=10 units=2
+[DEBUG] field::process() type=1 step=11 units=2
+[DEBUG] field::process() type=1 step=12 units=2
+[DEBUG] field::process() type=1 step=13 units=2
+[DEBUG] field::process() type=1 step=14 units=2
+[DEBUG] field::process() type=1 step=15 units=2
+[DEBUG] field::process() type=1 step=16 units=2
+[DEBUG] field::process() type=3 step=1 units=1
+[DEBUG] before get_message engLen=10
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] Analyze: engType=2
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=2 units=1
+[DEBUG] before get_message engLen=7
+[DEBUG] after get_message, msgType=0x39, before Analyze
+[DEBUG] Analyze: engType=57
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=70 step=0 units=3
+[DEBUG] before get_message engLen=23
+[DEBUG] after get_message, msgType=0x5a, before Analyze
+[DEBUG] Analyze: engType=90
+[DEBUG] MSG_DRAW: engine_player=0 active_field=1 IsBattleField=0
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=70 step=1 units=3
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=20 units=2
+[DEBUG] field::process() type=33 step=25 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=33 step=26 units=2
+[DEBUG] field::process() type=3 step=3 units=1
+[DEBUG] field::process() type=3 step=4 units=1
+[DEBUG] before get_message engLen=3
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=5 units=1
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=20 units=2
+[DEBUG] field::process() type=33 step=25 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=33 step=26 units=2
+[DEBUG] field::process() type=3 step=6 units=1
+[DEBUG] field::process() type=1 step=0 units=2
+[DEBUG] field::process() type=1 step=1 units=2
+[DEBUG] field::process() type=1 step=2 units=2
+[DEBUG] field::process() type=5 step=0 units=3
+[DEBUG] field::process() type=5 step=1 units=3
+[DEBUG] field::process() type=5 step=3 units=3
+[DEBUG] field::process() type=5 step=5 units=3
+[DEBUG] field::process() type=5 step=7 units=3
+[DEBUG] field::process() type=1 step=3 units=2
+[DEBUG] field::process() type=1 step=4 units=2
+[DEBUG] field::process() type=1 step=5 units=2
+[DEBUG] field::process() type=1 step=8 units=2
+[DEBUG] field::process() type=1 step=9 units=2
+[DEBUG] field::process() type=1 step=10 units=2
+[DEBUG] field::process() type=1 step=11 units=2
+[DEBUG] field::process() type=1 step=12 units=2
+[DEBUG] field::process() type=1 step=13 units=2
+[DEBUG] field::process() type=1 step=14 units=2
+[DEBUG] field::process() type=1 step=15 units=2
+[DEBUG] field::process() type=1 step=16 units=2
+[DEBUG] field::process() type=3 step=7 units=1
+[DEBUG] before get_message engLen=3
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=32 step=0 units=2
+[DEBUG] field::process() type=10 step=0 units=3
+[DEBUG] before get_message engLen=96
+[DEBUG] after get_message, msgType=0xb, before Analyze
+[DEBUG] Analyze: engType=11
+[DEBUG] WaitforResponse: playerid=0 active_field=1
+[DEBUG] WaitforResponseAfterRewrite: playerid=0 active_field=1
+[DEBUG] after Analyze, stop=1
+[DEBUG] set_active_field: 1->2 new game_field=0000000000D985E0 temp_card=0000000000D9AB00
+[DEBUG] TPDuel::Process: before Process() field 2
+[DEBUG] field::process() type=6 step=0 units=2
+[DEBUG] before get_message engLen=4
+[DEBUG] after get_message, msgType=0xc8, before Analyze
+[DEBUG] Analyze: engType=200
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=0 units=1
+[DEBUG] before get_message engLen=2
+[DEBUG] after get_message, msgType=0x28, before Analyze
+[DEBUG] Analyze: engType=40
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=1 step=0 units=2
+[DEBUG] field::process() type=1 step=1 units=2
+[DEBUG] field::process() type=1 step=2 units=2
+[DEBUG] field::process() type=5 step=0 units=3
+[DEBUG] field::process() type=5 step=1 units=3
+[DEBUG] field::process() type=5 step=3 units=3
+[DEBUG] field::process() type=5 step=5 units=3
+[DEBUG] field::process() type=5 step=7 units=3
+[DEBUG] field::process() type=1 step=3 units=2
+[DEBUG] field::process() type=1 step=4 units=2
+[DEBUG] field::process() type=1 step=5 units=2
+[DEBUG] field::process() type=1 step=8 units=2
+[DEBUG] field::process() type=1 step=9 units=2
+[DEBUG] field::process() type=1 step=10 units=2
+[DEBUG] field::process() type=1 step=11 units=2
+[DEBUG] field::process() type=1 step=12 units=2
+[DEBUG] field::process() type=1 step=13 units=2
+[DEBUG] field::process() type=1 step=14 units=2
+[DEBUG] field::process() type=1 step=15 units=2
+[DEBUG] field::process() type=1 step=16 units=2
+[DEBUG] field::process() type=3 step=1 units=1
+[DEBUG] before get_message engLen=10
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] Analyze: engType=2
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=2 units=1
+[DEBUG] before get_message engLen=7
+[DEBUG] after get_message, msgType=0x39, before Analyze
+[DEBUG] Analyze: engType=57
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=70 step=0 units=3
+[DEBUG] before get_message engLen=23
+[DEBUG] after get_message, msgType=0x5a, before Analyze
+[DEBUG] Analyze: engType=90
+[DEBUG] MSG_DRAW: engine_player=0 active_field=2 IsBattleField=0
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=70 step=1 units=3
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=20 units=2
+[DEBUG] field::process() type=33 step=25 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=33 step=26 units=2
+[DEBUG] field::process() type=3 step=3 units=1
+[DEBUG] field::process() type=3 step=4 units=1
+[DEBUG] before get_message engLen=3
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=5 units=1
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=20 units=2
+[DEBUG] field::process() type=33 step=25 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=33 step=26 units=2
+[DEBUG] field::process() type=3 step=6 units=1
+[DEBUG] field::process() type=1 step=0 units=2
+[DEBUG] field::process() type=1 step=1 units=2
+[DEBUG] field::process() type=1 step=2 units=2
+[DEBUG] field::process() type=5 step=0 units=3
+[DEBUG] field::process() type=5 step=1 units=3
+[DEBUG] field::process() type=5 step=3 units=3
+[DEBUG] field::process() type=5 step=5 units=3
+[DEBUG] field::process() type=5 step=7 units=3
+[DEBUG] field::process() type=1 step=3 units=2
+[DEBUG] field::process() type=1 step=4 units=2
+[DEBUG] field::process() type=1 step=5 units=2
+[DEBUG] field::process() type=1 step=8 units=2
+[DEBUG] field::process() type=1 step=9 units=2
+[DEBUG] field::process() type=1 step=10 units=2
+[DEBUG] field::process() type=1 step=11 units=2
+[DEBUG] field::process() type=1 step=12 units=2
+[DEBUG] field::process() type=1 step=13 units=2
+[DEBUG] field::process() type=1 step=14 units=2
+[DEBUG] field::process() type=1 step=15 units=2
+[DEBUG] field::process() type=1 step=16 units=2
+[DEBUG] field::process() type=3 step=7 units=1
+[DEBUG] before get_message engLen=3
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=32 step=0 units=2
+[DEBUG] field::process() type=10 step=0 units=3
+[DEBUG] before get_message engLen=96
+[DEBUG] after get_message, msgType=0xb, before Analyze
+[DEBUG] Analyze: engType=11
+[DEBUG] WaitforResponse: playerid=0 active_field=2
+[DEBUG] WaitforResponseAfterRewrite: playerid=0 active_field=2
+[DEBUG] after Analyze, stop=1
+[DEBUG] set_active_field: 2->3 new game_field=0000000000DA3100 temp_card=0000000000DA7630
+[DEBUG] TPDuel::Process: before Process() field 3
+[DEBUG] field::process() type=6 step=0 units=2
+[DEBUG] before get_message engLen=4
+[DEBUG] after get_message, msgType=0xc8, before Analyze
+[DEBUG] Analyze: engType=200
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=0 units=1
+[DEBUG] before get_message engLen=2
+[DEBUG] after get_message, msgType=0x28, before Analyze
+[DEBUG] Analyze: engType=40
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=1 step=0 units=2
+[DEBUG] field::process() type=1 step=1 units=2
+[DEBUG] field::process() type=1 step=2 units=2
+[DEBUG] field::process() type=5 step=0 units=3
+[DEBUG] field::process() type=5 step=1 units=3
+[DEBUG] field::process() type=5 step=3 units=3
+[DEBUG] field::process() type=5 step=5 units=3
+[DEBUG] field::process() type=5 step=7 units=3
+[DEBUG] field::process() type=1 step=3 units=2
+[DEBUG] field::process() type=1 step=4 units=2
+[DEBUG] field::process() type=1 step=5 units=2
+[DEBUG] field::process() type=1 step=8 units=2
+[DEBUG] field::process() type=1 step=9 units=2
+[DEBUG] field::process() type=1 step=10 units=2
+[DEBUG] field::process() type=1 step=11 units=2
+[DEBUG] field::process() type=1 step=12 units=2
+[DEBUG] field::process() type=1 step=13 units=2
+[DEBUG] field::process() type=1 step=14 units=2
+[DEBUG] field::process() type=1 step=15 units=2
+[DEBUG] field::process() type=1 step=16 units=2
+[DEBUG] field::process() type=3 step=1 units=1
+[DEBUG] before get_message engLen=10
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] Analyze: engType=2
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=2 units=1
+[DEBUG] before get_message engLen=7
+[DEBUG] after get_message, msgType=0x39, before Analyze
+[DEBUG] Analyze: engType=57
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=70 step=0 units=3
+[DEBUG] before get_message engLen=23
+[DEBUG] after get_message, msgType=0x5a, before Analyze
+[DEBUG] Analyze: engType=90
+[DEBUG] MSG_DRAW: engine_player=0 active_field=3 IsBattleField=0
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=70 step=1 units=3
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=20 units=2
+[DEBUG] field::process() type=33 step=25 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=33 step=26 units=2
+[DEBUG] field::process() type=3 step=3 units=1
+[DEBUG] field::process() type=3 step=4 units=1
+[DEBUG] before get_message engLen=3
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=3 step=5 units=1
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=0 units=2
+[DEBUG] field::process() type=33 step=2 units=2
+[DEBUG] field::process() type=33 step=20 units=2
+[DEBUG] field::process() type=33 step=25 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=33 step=26 units=2
+[DEBUG] field::process() type=3 step=6 units=1
+[DEBUG] field::process() type=1 step=0 units=2
+[DEBUG] field::process() type=1 step=1 units=2
+[DEBUG] field::process() type=1 step=2 units=2
+[DEBUG] field::process() type=5 step=0 units=3
+[DEBUG] field::process() type=5 step=1 units=3
+[DEBUG] field::process() type=5 step=3 units=3
+[DEBUG] field::process() type=5 step=5 units=3
+[DEBUG] field::process() type=5 step=7 units=3
+[DEBUG] field::process() type=1 step=3 units=2
+[DEBUG] field::process() type=1 step=4 units=2
+[DEBUG] field::process() type=1 step=5 units=2
+[DEBUG] field::process() type=1 step=8 units=2
+[DEBUG] field::process() type=1 step=9 units=2
+[DEBUG] field::process() type=1 step=10 units=2
+[DEBUG] field::process() type=1 step=11 units=2
+[DEBUG] field::process() type=1 step=12 units=2
+[DEBUG] field::process() type=1 step=13 units=2
+[DEBUG] field::process() type=1 step=14 units=2
+[DEBUG] field::process() type=1 step=15 units=2
+[DEBUG] field::process() type=1 step=16 units=2
+[DEBUG] field::process() type=3 step=7 units=1
+[DEBUG] before get_message engLen=3
+[DEBUG] after get_message, msgType=0x29, before Analyze
+[DEBUG] Analyze: engType=41
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=32 step=0 units=2
+[DEBUG] field::process() type=10 step=0 units=3
+[DEBUG] before get_message engLen=96
+[DEBUG] after get_message, msgType=0xb, before Analyze
+[DEBUG] Analyze: engType=11
+[DEBUG] WaitforResponse: playerid=0 active_field=3
+[DEBUG] WaitforResponseAfterRewrite: playerid=0 active_field=3
+[DEBUG] after Analyze, stop=1
+[DEBUG] 有人投降了 玩家id=0 所属场地的玩家id=0
+[DEBUG] field::process() type=10 step=1 units=3
+[DEBUG] step是=1
+[DEBUG] 玩家id=0 是否死亡=1
+[DEBUG] field::process() type=10 step=0 units=3
+[DEBUG] field::process() type=32 step=1 units=2
+[DEBUG] before get_message engLen=7
+[DEBUG] after get_message, msgType=0x2, before Analyze
+[DEBUG] Analyze: engType=2
+[DEBUG] after Analyze, stop=0
+[DEBUG] field::process() type=31 step=0 units=3
+[DEBUG] field::process() type=31 step=1 units=3
+[DEBUG] field::process() type=31 step=2 units=3
+[DEBUG] field::process() type=16 step=0 units=4
+[DEBUG] field::process() type=31 step=3 units=3
+[DEBUG] field::process() type=32 step=10 units=2
+[DEBUG] field::process() type=1 step=0 units=3
+[DEBUG] field::process() type=1 step=1 units=3
+[DEBUG] field::process() type=1 step=2 units=3
+[DEBUG] field::process() type=5 step=0 units=4
+[DEBUG] field::process() type=5 step=1 units=4
+[DEBUG] field::process() type=5 step=3 units=4
+[DEBUG] field::process() type=5 step=5 units=4
+[DEBUG] field::process() type=5 step=7 units=4
+[DEBUG] field::process() type=1 step=3 units=3
+[DEBUG] field::process() type=1 step=4 units=3
+[DEBUG] field::process() type=1 step=5 units=3
+[DEBUG] field::process() type=1 step=8 units=3
+[DEBUG] field::process() type=1 step=9 units=3
+[DEBUG] field::process() type=1 step=10 units=3
+[DEBUG] field::process() type=1 step=11 units=3
+[DEBUG] field::process() type=1 step=12 units=3
+[DEBUG] field::process() type=1 step=13 units=3
+[DEBUG] field::process() type=1 step=14 units=3
+[DEBUG] field::process() type=1 step=15 units=3
+[DEBUG] field::process() type=1 step=16 units=3
+[DEBUG] field::process() type=32 step=11 units=2
+[DEBUG] field::process() type=3 step=8 units=1
+[DEBUG] before get_message engLen=1
+[DEBUG] after get_message, msgType=0x2b, before Analyze
+[DEBUG] Analyze: engType=43
+[DEBUG] after Analyze, stop=1

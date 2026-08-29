@@ -2,167 +2,187 @@
 #define DATAMANAGER_H
 
 #include <unordered_map>
+#include <array>
 #include <vector>
 #include <string>
 #include <sqlite3.h>
 #include "../ocgcore/card_data.h"
 
-namespace irr {
-	namespace io {
-		class IReadFile;
-		class IFileSystem;
-	}
+namespace irr
+{
+    namespace io
+    {
+        class IReadFile;
+        class IFileSystem;
+    }
 }
 
-namespace ygo {
+namespace ygo
+{
 
-constexpr int MAX_STRING_ID = 0x7ff;
-constexpr uint32_t MIN_CARD_ID = (uint32_t)(MAX_STRING_ID + 1) >> 4;
-constexpr uint32_t MAX_CARD_ID = 0x0fffffffU;
-constexpr int TEXT_LINE_SIZE = 256;
+    constexpr int MAX_STRING_ID = 0x7ff;
+    constexpr uint32_t MIN_CARD_ID = (uint32_t)(MAX_STRING_ID + 1) >> 4;
+    constexpr uint32_t MAX_CARD_ID = 0x0fffffffU;
+    constexpr int TEXT_LINE_SIZE = 256;
 
-using CardData = card_data;
-struct CardDataC {
-	uint32_t code{};
-	uint32_t alias{};
-	uint16_t setcode[SIZE_SETCODE]{};
-	uint32_t type{};
-	uint32_t level{};
-	uint32_t attribute{};
-	uint32_t race{};
-	int32_t attack{};
-	int32_t defense{};
-	uint32_t lscale{};
-	uint32_t rscale{};
-	uint32_t link_marker{};
-	uint32_t rule_code{};
+    using CardData = card_data;
+    struct CardDataC
+    {
+        uint32_t code{};
+        uint32_t alias{};
+        uint16_t setcode[SIZE_SETCODE]{};
+        uint32_t type{};
+        uint32_t level{};
+        uint32_t attribute{};
+        uint32_t race{};
+        int32_t attack{};
+        int32_t defense{};
+        uint32_t lscale{};
+        uint32_t rscale{};
+        uint32_t link_marker{};
+        uint32_t rule_code{};
 
-	// extra columns
-	uint32_t ot{};
-	uint32_t category{};
+        // extra columns
+        uint32_t ot{};
+        uint32_t category{};
+        uint64_t capability_mask{};
 
-	bool is_setcodes(const std::vector<unsigned int>& values) const {
-		for (auto& value : values) {
-			for (const auto& x : setcode) {
-				if(!x)
-					break;
-				if(check_setcode(x, value))
-					return true;
-			}
-		}
-		return false;
-	}
+        bool is_setcodes(const std::vector<unsigned int> &values) const
+        {
+            for (auto &value : values)
+            {
+                for (const auto &x : setcode)
+                {
+                    if (!x)
+                        break;
+                    if (check_setcode(x, value))
+                        return true;
+                }
+            }
+            return false;
+        }
 
-	uint32_t get_original_code() const {
-		return alias ? alias : code;
-	}
+        uint32_t get_original_code() const
+        {
+            return alias ? alias : code;
+        }
 
-	uint32_t get_duel_code() const {
-		return rule_code ? rule_code : get_original_code();
-	}
-};
-constexpr int DESC_COUNT = 16;
-struct CardString {
-	std::wstring name;
-	std::wstring text;
-	std::wstring desc[DESC_COUNT];
-};
-using code_pointer = std::unordered_map<uint32_t, CardDataC>::const_iterator;
-using string_pointer = std::unordered_map<uint32_t, CardString>::const_iterator;
-using wstring_map = std::unordered_map<uint32_t, std::wstring>;
+        uint32_t get_duel_code() const
+        {
+            return rule_code ? rule_code : get_original_code();
+        }
+    };
+    constexpr int DESC_COUNT = 16;
+    struct CardString
+    {
+        std::wstring name;
+        std::wstring text;
+        std::wstring desc[DESC_COUNT];
+    };
+    using code_pointer = std::unordered_map<uint32_t, CardDataC>::const_iterator;
+    using string_pointer = std::unordered_map<uint32_t, CardString>::const_iterator;
+    using wstring_map = std::unordered_map<uint32_t, std::wstring>;
 
-class ClientCard;
+    class ClientCard;
 
-class DataManager {
-public:
-	DataManager();
-	bool ReadDB(sqlite3* pDB);
-	bool LoadDB(const char* file);
+    class DataManager
+    {
+    public:
+        DataManager();
+        bool ReadDB(sqlite3 *pDB);
+        bool LoadDB(const char *file);
+        bool LoadStrings(const char *file);
+        void ReadStringConfLine(const char *linebuf);
 #ifndef YGOPRO_SERVER_MODE
-	bool LoadStrings(const char* file);
-	bool LoadStrings(irr::io::IReadFile* reader);
-	void ReadStringConfLine(const char* linebuf);
+        bool LoadStrings(irr::io::IReadFile *reader);
 #endif
-	bool Error(sqlite3* pDB, sqlite3_stmt* pStmt = nullptr);
+        bool Error(sqlite3 *pDB, sqlite3_stmt *pStmt = nullptr);
 
-	code_pointer GetCodePointer(uint32_t code) const;
+        code_pointer GetCodePointer(uint32_t code) const;
 #ifndef YGOPRO_SERVER_MODE
-	string_pointer GetStringPointer(uint32_t code) const;
+        string_pointer GetStringPointer(uint32_t code) const;
 #endif
-	const std::unordered_map<uint32_t, CardDataC>& GetDataTable() const {
-		return _datas;
-	}
+        const std::unordered_map<uint32_t, CardDataC> &GetDataTable() const
+        {
+            return _datas;
+        }
 #ifndef YGOPRO_SERVER_MODE
-	const std::unordered_map<uint32_t, CardString>& GetStringTable() const {
-		return _strings;
-	}
+        const std::unordered_map<uint32_t, CardString> &GetStringTable() const
+        {
+            return _strings;
+        }
 #endif
-	bool GetData(uint32_t code, CardData* pData) const;
+        bool GetData(uint32_t code, CardData *pData) const;
+        const wchar_t *GetSysString(uint32_t code) const;
 #ifndef YGOPRO_SERVER_MODE
-	bool GetString(uint32_t code, CardString* pStr) const;
-	const wchar_t* GetName(uint32_t code) const;
-	const wchar_t* GetText(uint32_t code) const;
-	const wchar_t* GetDesc(uint32_t strCode) const;
-	const wchar_t* GetSysString(uint32_t code) const;
-	const wchar_t* GetVictoryString(uint32_t code) const;
-	const wchar_t* GetCounterName(uint32_t code) const;
-	const wchar_t* GetSetName(uint32_t code) const;
-	std::vector<uint32_t> GetSetCodes(std::wstring setname) const;
-	std::wstring GetNumString(int num, bool bracket = false) const;
-	const wchar_t* FormatLocation(int location, int sequence) const;
-	const wchar_t* FormatLocation(ClientCard* card) const;
-	std::wstring FormatAttribute(unsigned int attribute) const;
-	std::wstring FormatRace(unsigned int race) const;
-	std::wstring FormatType(unsigned int type) const;
-	std::wstring FormatSetName(const uint16_t setcode[]) const;
-	std::wstring FormatLinkMarker(unsigned int link_marker) const;
-	static wchar_t NormalizeChar(wchar_t c);
-	static void NormalizeString(const wchar_t* src, wchar_t* dst, size_t dst_size);
-	static bool CardNameContains(const wchar_t* haystack, const wchar_t* needle);
+        bool GetString(uint32_t code, CardString *pStr) const;
+        const wchar_t *GetName(uint32_t code) const;
+        const wchar_t *GetText(uint32_t code) const;
+        const wchar_t *GetDesc(uint32_t strCode) const;
+        const wchar_t *GetVictoryString(uint32_t code) const;
+        const wchar_t *GetCounterName(uint32_t code) const;
+        const wchar_t *GetSetName(uint32_t code) const;
+        std::vector<uint32_t> GetSetCodes(std::wstring setname) const;
+        std::wstring GetNumString(int num, bool bracket = false) const;
+        const wchar_t *FormatLocation(int location, int sequence) const;
+        const wchar_t *FormatLocation(ClientCard *card) const;
+        std::wstring FormatAttribute(unsigned int attribute) const;
+        std::wstring FormatRace(unsigned int race) const;
+        std::wstring FormatType(unsigned int type) const;
+        std::wstring FormatSetName(const uint16_t setcode[]) const;
+        std::wstring FormatLinkMarker(unsigned int link_marker) const;
+        static wchar_t NormalizeChar(wchar_t c);
+        static void NormalizeString(const wchar_t *src, wchar_t *dst, size_t dst_size);
+        static bool CardNameContains(const wchar_t *haystack, const wchar_t *needle);
 
-	wstring_map _counterStrings;
-	wstring_map _victoryStrings;
-	wstring_map _setnameStrings;
-	wstring_map _sysStrings;
+        wstring_map _counterStrings;
+        wstring_map _victoryStrings;
+        wstring_map _setnameStrings;
 #endif
-	char errmsg[512]{};
-	const wchar_t* unknown_string{ L"???" };
+        wstring_map _sysStrings;
+        char errmsg[512]{};
+        const wchar_t *unknown_string{L"???"};
 #if !defined(YGOPRO_SERVER_MODE) || defined(SERVER_ZIP_SUPPORT)
-	irr::io::IFileSystem* IrrFileSystem{};
+        irr::io::IFileSystem *IrrFileSystem{};
 #endif
 
-	static constexpr uint32_t STRING_ID_LOCATION = 1000;
-	static constexpr uint32_t STRING_ID_ATTRIBUTE = 1010;
-	static constexpr uint32_t STRING_ID_RACE = 1020;
-	static constexpr uint32_t STRING_ID_TYPE = 1050;
-	static constexpr int TYPES_COUNT = 27;
+        static constexpr uint32_t STRING_ID_LOCATION = 1000;
+        static constexpr uint32_t STRING_ID_ATTRIBUTE = 1010;
+        static constexpr uint32_t STRING_ID_RACE = 1020;
+        static constexpr uint32_t STRING_ID_TYPE = 1050;
+        static constexpr int TYPES_COUNT = 27;
 
-	static uint32_t CardReader(uint32_t, card_data*);
-	static unsigned char* ScriptReaderEx(const char* script_path, int* slen);
-	
+        static uint32_t CardReader(uint32_t, card_data *);
+        static uint32_t RandomCardReader(uint64_t capability, uint32_t count, uint32_t random_seed, uint32_t *codes);
+        static unsigned char *ScriptReaderEx(const char *script_path, int *slen);
+
 #if !defined(YGOPRO_SERVER_MODE) || defined(SERVER_ZIP_SUPPORT)
-	//read by IFileSystem
-	static unsigned char* ReadScriptFromIrrFS(const char* script_name, int* slen);
+        // read by IFileSystem
+        static unsigned char *ReadScriptFromIrrFS(const char *script_name, int *slen);
 #endif
-	//read by fread
-	static unsigned char* ReadScriptFromFile(const char* script_name, int* slen);
-	
+        // read by fread
+        static unsigned char *ReadScriptFromFile(const char *script_name, int *slen);
+
 #ifndef YGOPRO_SERVER_MODE
-	static bool deck_sort_lv(const CardDataC* l1, const CardDataC* l2);
-	static bool deck_sort_atk(const CardDataC* l1, const CardDataC* l2);
-	static bool deck_sort_def(const CardDataC* l1, const CardDataC* l2);
-	static bool deck_sort_name(const CardDataC* l1, const CardDataC* l2);
-	static bool deck_sort_id(const CardDataC* l1, const CardDataC* l2);
-#endif //YGOPRO_SERVER_MODE
+        static bool deck_sort_lv(const CardDataC *l1, const CardDataC *l2);
+        static bool deck_sort_atk(const CardDataC *l1, const CardDataC *l2);
+        static bool deck_sort_def(const CardDataC *l1, const CardDataC *l2);
+        static bool deck_sort_name(const CardDataC *l1, const CardDataC *l2);
+        static bool deck_sort_id(const CardDataC *l1, const CardDataC *l2);
+#endif // YGOPRO_SERVER_MODE
 
-private:
-	const wchar_t* GetMapString(const wstring_map& table, uint32_t code) const;
-	std::unordered_map<uint32_t, CardDataC> _datas;
-	std::unordered_map<uint32_t, CardString> _strings;
-	std::unordered_map<uint32_t, std::vector<uint16_t>> extra_setcode;
-};
+    private:
+        const wchar_t *GetMapString(const wstring_map &table, uint32_t code) const;
+        std::unordered_map<uint32_t, CardDataC> _datas;
+        std::unordered_map<uint32_t, CardString> _strings;
+        std::unordered_map<uint32_t, std::vector<uint16_t>> extra_setcode;
+        std::vector<uint32_t> random_card_pool;
+        std::array<std::vector<uint32_t>, 64> capability_pools;
 
-extern DataManager dataManager;
+        void BuildRandomCardPools();
+    };
+
+    extern DataManager dataManager;
 
 }
 

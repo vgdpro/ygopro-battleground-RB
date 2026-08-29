@@ -59,6 +59,7 @@ namespace ygo
         static void SingleTimer(evutil_socket_t fd, short events, void *arg);
 
     private:
+        void AbortDuelWithChat(const char16_t *message);
         int WriteUpdateData(int player, int location, unsigned int flag, unsigned char *&qbuf, int use_cache, int field);
 #ifdef YGOPRO_SERVER_MODE
         bool IsBattleField() const;
@@ -78,6 +79,7 @@ namespace ygo
         unsigned short phase{0};
         bool deck_reversed{false};
         bool able_to_bp{false};
+        unsigned char battle_turn_counter{0};
         unsigned char active_field{0};
 #endif
         Replay last_replay;

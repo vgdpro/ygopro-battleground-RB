@@ -26,6 +26,8 @@ Requirements:
 - Reuse existing agent files if they are already close to correct.
 - Keep descriptions keyword-rich so Copilot can discover them.
 - Ensure the agents reflect the real architecture, testing workflow, and delivery process from `knowledge-base/`.
+- For battleground work, generated agents must treat `battleground-roadmap.md` as the only task/status/acceptance source, `battleground-tech.md` as implementation evidence, and `task-numbering.md` as numbering rules only.
+- Treat `memories/` as non-authoritative recovery context. QA is read-only and hands off proposed status, milestone completion dates, and evidence; only Doc Maintainer edits `knowledge-base/` or `memories/`.
 - If the knowledge base is incomplete, keep the supplementation conservative and call out what is missing.
 
 Minimum output:

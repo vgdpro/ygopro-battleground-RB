@@ -10,7 +10,7 @@ handoffs:
       send: false
     - label: "交给 QA"
       agent: "QA"
-      prompt: "请按验收标准做最终验证，报告通过项、未验证项与剩余风险。"
+      prompt: "请按 battleground-roadmap.md 的验收标准做最终验证，并输出 roadmap 状态、完成时间和 tech 技术证据 handoff；不得直接编辑知识库或记忆库。"
       send: false
 ---
 
@@ -22,7 +22,7 @@ handoffs:
 - 保持已限定的行为和验收标准不变。
 - 消除明显的局部重复、不自然的命名或不必要的分支。
 - 清理后重新运行针对性验证。
-- 如果清理涉及战旗模式代码，对照 `knowledge-base/battleground-tech.md` 确认清理不破坏接口约定。
+- 如果清理涉及战旗模式代码，对照 `knowledge-base/battleground-roadmap.md` 确认任务范围和验收标准，对照 `knowledge-base/battleground-tech.md` 确认清理不破坏接口约定。
 
 ## 约束
 
