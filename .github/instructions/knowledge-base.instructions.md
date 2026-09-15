@@ -37,4 +37,29 @@ applyTo: "**"
 - `doc-standards.md` 是**编写规范权威**：所有知识库和记忆库文件的编辑必须遵循此规范
 - Swarm 维护分工：Specifier 输出任务、依赖和验收标准；Architect/Orchestrator 输出已确认架构决策；QA 输出状态、完成日期和精简验证证据；仅 Doc Maintainer 编辑知识库，并在状态显著变化时同步 `memories/`
 - `memories/` 是非权威恢复摘要；发生冲突时以对应 knowledge-base 权威文件为准
-- 文档格式清理和过期内容删除由 **doc-maintainer** agent 负责（斜杠 `/doc-maintainer` 调用，或编辑知识库文件时自动加载 `.github/instructions/doc-maintainer.instructions.md`）
+- 文档格式清理和过期内容删除由 **doc-maintainer** agent 负责（斜杠 `/doc-maintainer` 调用，或编辑知识库文件时自动加载 `.github/instructions/doc-maintainer.instructions.md`)
+
+## 本地技能库（`.agents/skills`）
+
+- **来源**：本地技能库 `D:\SourceCode\agent-skills-hub`，通过 Windows 目录联接（junction）挂载到 `.agents/skills/<skill-name>`，**不复制文件**
+- **更新**：在源仓库执行 `git pull` 后，本项目链接内容自动生效；不维护第二份副本，不生成锁定文件
+- **定位**：通用方法与检查清单来源。技能与仓库规范冲突时，**一律以本仓库知识库与 instructions 为准**
+- **不适用**：技能库中无 Lua 专用技能、无 SQLite 专用技能、无 C++ 单元测试框架技能；`testing-patterns` 为 Jest 专用，不得用于 `ocgcore-tests`
+- **边界**：目录联接不是安全边界，不得链接密钥、`.env` 或 `skills` 目录之外的任何内容
+
+### 按角色分配
+
+| 角色               | 技能                                                                                                                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coder              | `cpp-pro`、`c-pro`、`error-handling-patterns`、`systematic-debugging`、`debugging-strategies`、`find-bugs`、`performance-profiling`                                                                                     |
+| Cleaner            | `cpp-pro`、`codebase-cleanup-tech-debt`、`systematic-debugging`、`verification-before-completion`                                                                                                                       |
+| Architect          | `architecture`、`architecture-decision-records`、`c4-code`、`c4-architecture-c4-architecture`、`game-development/multiplayer`、`threat-modeling-expert`、`markdown-mermaid-writing`、`docs-architect`                   |
+| Hardender          | `systematic-debugging`、`error-handling-patterns`、`sharp-edges`、`cpp-pro`、`threat-modeling-expert`、`security-auditor`、`protocol-reverse-engineering`、`binary-analysis-patterns`、`verification-before-completion` |
+| QA                 | `verification-before-completion`、`systematic-debugging`、`code-review-checklist`、`find-bugs`、`cpp-pro`、`performance-profiling`、`game-development/multiplayer`                                                      |
+| Specifier          | `plan-writing`、`concise-planning`、`architecture-decision-records`、`docs-architect`                                                                                                                                   |
+| Game Designer      | `brainstorming`、`game-development/game-design`、`game-development/multiplayer`、`game-development/pc-games`                                                                                                            |
+| Balance Analyst    | `scientific-critical-thinking`、`game-development/game-design`、`game-development/multiplayer`、`statistical-analysis`                                                                                                  |
+| doc-maintainer     | `markdown-mermaid-writing`、`mermaid-expert`、`docs-architect`、`documentation-templates`、`architecture-decision-records`                                                                                              |
+| Swarm Orchestrator | `plan-writing`、`concise-planning`、`architecture-decision-records`、`agent-orchestration-improve-agent`、`agent-orchestration-multi-agent-optimize`、`writing-skills`                                                  |
+
+> `game-development` 为编排技能，`game-design` 与 `multiplayer` 是其子技能；顶层联接已包含子技能，**不得在源仓库内创建嵌套联接**。

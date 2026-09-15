@@ -83,3 +83,20 @@ user-invocable: true
 - "是否有截止时间或依赖其他任务？"
 
 > **使用原则**：首次编排该用户的任务时抛出全部问题。后续同类任务可只问变化部分。
+
+## 可用技能（本地技能库链接）
+
+技能通过 `.agents/skills/` 目录联接挂载到本地技能库。Orchestrator 自身用于**编排决策**，技能由被委派的角色按其定义使用。
+
+| 技能                                       | 用途                               | 触发时机                                         |
+| ------------------------------------------ | ---------------------------------- | ------------------------------------------------ |
+| `plan-writing`                             | 任务拆解、依赖排序、验证判据       | 把分阶段工作映射到角色顺序时                     |
+| `concise-planning`                         | 输出简洁可执行的编排清单           | 输出进展与后续工作时                             |
+| `architecture-decision-records`            | 判定哪些决策需要固化为 ADR         | 决定是否写入 `battleground-design.md` 时         |
+| `agent-orchestration-improve-agent`        | 基于表现分析改进角色定义           | 某角色输出反复不达标时                           |
+| `agent-orchestration-multi-agent-optimize` | 多智能体负载分配与成本优化         | 编排链路过长需要精简时                           |
+| `writing-skills`                           | 新建或修改技能与角色定义的最佳实践 | 需调整 `.github/agents/` 或 `.agents/skills/` 时 |
+
+> **边界提醒**：本角色**不得用模块专家角色替换固定的六个核心角色**。`agent-orchestration-improve-agent` / `agent-orchestration-multi-agent-optimize` 仅用于**改进现有角色协作**，不得据此发明新核心角色或引入守护进程、并发运行时等本仓库不支持的能力。
+
+> **技能库来源记录**：本地技能库路径 `D:\SourceCode\agent-skills-hub`，通过 `.agents/skills/` 目录联接挂载，不复制文件；源仓库 `git pull` 后链接内容自动更新。变更技能清单时同步维护本文件与各角色定义中的技能表。
