@@ -36,16 +36,15 @@ user-invocable: true
 
 ## 可用技能（本地技能库链接）
 
-技能通过 `.agents/skills/` 目录联接挂载到本地技能库，使用前按其 `SKILL.md` 执行。
+技能通过 `.agents/skills/` 目录联接挂载到本地技能根目录 `D:\SourceCode\skills`（含 4 个源仓库），使用前按其 `SKILL.md` 执行。源标记：`P` = plugin 工程流程仓库、`C` = catalog 栈模式仓库。
 
-| 技能                            | 用途                               | 触发时机                                 |
-| ------------------------------- | ---------------------------------- | ---------------------------------------- |
-| `markdown-mermaid-writing`      | Markdown 与 Mermaid 规范、文档模板 | 规范知识库格式或补图表时                 |
-| `mermaid-expert`                | 流程图、时序图、ERD 语法细节       | 补 field 流转、clone 生命周期图时        |
-| `docs-architect`                | 文档结构拆分、目录组织             | 文档超过 50 行需加目录时                 |
-| `documentation-templates`       | README/API 文档/注释结构约定       | 新建文档骨架时                           |
-| `architecture-decision-records` | ADR 标准写法                       | 维护 `battleground-design.md` 决策记录时 |
+| 技能                            | 源  | 用途                               | 触发时机                                 |
+| ------------------------------- | --- | ---------------------------------- | ---------------------------------------- |
+| `markdown-mermaid-writing`      | C   | Markdown 与 Mermaid 规范、文档模板 | 规范知识库格式或补图表时                 |
+| `documentation-templates`       | C   | README/API 文档/注释结构约定       | 新建文档骨架时                           |
+| `architecture-decision-records` | C   | ADR 标准写法                       | 维护 `battleground-design.md` 决策记录时 |
+| `domain-modeling`               | P   | 挑战术语、固化领域模型与术语表     | 统一 `field`/`home_clone` 等术语写法时   |
 
-> **边界提醒**：上述技能均为通用文档工具，**不能覆盖本仓库的权威规范**。`knowledge-base/doc-standards.md` 的状态标记（`✅`/``/`❌`/`⚠️`）、交叉引用规则、精简要求和术语约定优先于技能的模板建议。技能与 `doc-standards.md`冲突时，一律以`doc-standards.md` 为准。
+> **边界提醒**：上述技能均为通用文档工具，**不能覆盖本仓库的权威规范**。`knowledge-base/doc-standards.md` 的状态标记（`✅`/`🚧`/`❌`/`⚠️`）、交叉引用规则、精简要求和术语约定优先于技能的模板建议。技能与 `doc-standards.md` 冲突时，一律以 `doc-standards.md` 为准。
 >
 > **约束提醒**：本角色只编辑 `knowledge-base/` 与 `memories/`，不得修改源代码、配置、数据库或 Agent 定义（包括本文件）。

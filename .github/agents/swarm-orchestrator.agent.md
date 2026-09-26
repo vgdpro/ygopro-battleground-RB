@@ -86,17 +86,19 @@ user-invocable: true
 
 ## 可用技能（本地技能库链接）
 
-技能通过 `.agents/skills/` 目录联接挂载到本地技能库。Orchestrator 自身用于**编排决策**，技能由被委派的角色按其定义使用。
+技能通过 `.agents/skills/` 目录联接挂载到本地技能根目录 `D:\SourceCode\skills`（含 4 个源仓库）。Orchestrator 自身用于**编排决策**，技能由被委派的角色按其定义使用。源标记：`P` = plugin 工程流程仓库、`C` = catalog 栈模式仓库。
 
-| 技能                                       | 用途                               | 触发时机                                         |
-| ------------------------------------------ | ---------------------------------- | ------------------------------------------------ |
-| `plan-writing`                             | 任务拆解、依赖排序、验证判据       | 把分阶段工作映射到角色顺序时                     |
-| `concise-planning`                         | 输出简洁可执行的编排清单           | 输出进展与后续工作时                             |
-| `architecture-decision-records`            | 判定哪些决策需要固化为 ADR         | 决定是否写入 `battleground-design.md` 时         |
-| `agent-orchestration-improve-agent`        | 基于表现分析改进角色定义           | 某角色输出反复不达标时                           |
-| `agent-orchestration-multi-agent-optimize` | 多智能体负载分配与成本优化         | 编排链路过长需要精简时                           |
-| `writing-skills`                           | 新建或修改技能与角色定义的最佳实践 | 需调整 `.github/agents/` 或 `.agents/skills/` 时 |
+| 技能                            | 源  | 用途                              | 触发时机                                 |
+| ------------------------------- | --- | --------------------------------- | ---------------------------------------- |
+| `plan-writing`                  | C   | 任务拆解、依赖排序、验证判据      | 把分阶段工作映射到角色顺序时             |
+| `writing-for-agents`            | P   | **为 agent 编写提示词与技能定义** | 调整 `.github/agents/` 或技能表时        |
+| `grilling`                      | P   | 结构化追问，澄清编排歧义          | 任务范围跨角色不清时                     |
+| `architecture-decision-records` | C   | 判定哪些决策需要固化为 ADR        | 决定是否写入 `battleground-design.md` 时 |
+| `resolving-merge-conflicts`     | P   | 逐块解决合并/变基冲突             | 编排期间出现 git 冲突时                  |
+| `domain-modeling`               | P   | 挑战术语、固化领域模型            | 发现角色间术语不一致时                   |
 
-> **边界提醒**：本角色**不得用模块专家角色替换固定的六个核心角色**。`agent-orchestration-improve-agent` / `agent-orchestration-multi-agent-optimize` 仅用于**改进现有角色协作**，不得据此发明新核心角色或引入守护进程、并发运行时等本仓库不支持的能力。
+> **边界提醒**：本角色**不得用模块专家角色替换固定的六个核心角色**。
+>
+> **已刻意排除**：`agent-orchestration-improve-agent`、`agent-orchestration-multi-agent-optimize` 面向多智能体**运行时**的性能优化，本仓库 swarm 是提示词编排、无守护进程或并发运行时，**已刻意不链接**；`writing-for-agents` 是同类需求下正确的替代技能。
 
-> **技能库来源记录**：本地技能库路径 `D:\SourceCode\agent-skills-hub`，通过 `.agents/skills/` 目录联接挂载，不复制文件；源仓库 `git pull` 后链接内容自动更新。变更技能清单时同步维护本文件与各角色定义中的技能表。
+> **技能库来源记录**：本地技能根目录 `D:\SourceCode\skills`（含 4 个源仓库），通过 `.agents/skills/` 目录联接挂载，不复制文件；源仓库 `git pull` 后链接内容自动更新。变更技能清单时同步维护 `.github/instructions/knowledge-base.instructions.md` 的技能章节与各角色定义中的技能表。
