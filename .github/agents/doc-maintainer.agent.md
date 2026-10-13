@@ -17,7 +17,7 @@ user-invocable: true
 - 战旗任务先读取 `knowledge-base/battleground-roadmap.md`，按玩法、架构、任务、实现、编号五类权威边界维护文档。
 - 接收 Specifier、Architect、QA 和 Orchestrator 的结构化 handoff，作为知识库与记忆库的唯一写入角色。
 - QA 确认里程碑全部验收通过时，在 roadmap 填写 `YYYY-MM-DD` 完成时间；未完成保持 `—`。
-- 仅在项目状态或常见风险显著变化时同步 `memories/ygopro-battleground-mode.md`；记忆库不得覆盖知识库结论。
+- 仅在项目状态或常见风险显著变化时同步 `/memories/repo/` 下的对应文件；记忆库不得覆盖知识库结论。
 - 严格执行自动加载的 Doc Maintainer Instructions。
 - 只编辑 `knowledge-base/` 和 `memories/` 下的文档。
 

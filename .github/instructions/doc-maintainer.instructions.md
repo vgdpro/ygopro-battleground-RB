@@ -53,10 +53,15 @@ applyTo: ["knowledge-base/**/*.md", "memories/**/*.md"]
     - Bug 修复历史 → 只更新步骤状态，不保留修复描述
     - 旧编号步骤文档（B-prefix）→ 已迁移到 M-prefix 的删除
     - 实现过程中的中间状态 → 更新为最终状态
+    - 0 字节空文件 → 直接删除
+    - **文档声称已完成但代码中不存在** → 按代码修正文档，并在 roadmap 标回 `🔜 待实现`，同时登记到 `task-numbering.md` 的状态回退记录；不保留已失效的"已完成"叙述
 
 2. **消除重复**：
     - 同一信息出现在多个文件 → 只保留权威来源，其他用交叉引用
     - 同一文件内的重复段落 → 合并或删除
+    - **同一主题的两张表**（如 `battleground-tech.md` 的"最新验证摘要"与文末"精简验证证据"）→ 合并为一张
+    - **接口小节内嵌的验证证据** → 收敛到文末验证表
+    - **与 `.github/agents/*.agent.md` 重复的 agent 行为规范** → 从知识库删除，保留 agent 文件为权威
 
 3. **修正错误**（如启用代码对比）：
     - 对比头文件（`.h`）中的接口签名与文档描述
@@ -117,7 +122,7 @@ applyTo: ["knowledge-base/**/*.md", "memories/**/*.md"]
 
 #### 步骤 4：记录到记忆库（可选）
 
-- 如果 bug 是常见模式或项目状态显著变化，更新 `memories/ygopro-battleground-mode.md`
+- 如果 bug 是常见模式或项目状态显著变化，更新 `/memories/repo/` 下的对应文件（`project-structure.md`、`build-commands.md`、`code-conventions.md`）
 - 不创建单任务实现日志；详细事实保留在对应 knowledge-base 权威文件
 
 #### 步骤 5：报告结果
@@ -164,27 +169,32 @@ applyTo: ["knowledge-base/**/*.md", "memories/**/*.md"]
 ### `battleground-roadmap.md`
 
 - 保留：里程碑、完成时间、任务编号、依赖、状态、验收标准和当前入口
-- 删除：接口签名、实现文件明细、构建命令和长篇验证日志
+- 删除：接口签名、实现文件明细、构建命令、长篇验证日志和函数名链
+- 验收标准描述**目标行为**，不抄写实现细节（如 `clone_card_state`/`remap_*` 等函数名、状态组字母）
 - 根据 QA handoff 更新状态；里程碑全部验收通过时填写 `YYYY-MM-DD`，未完成时使用 `—`
 - 根据 Specifier handoff 新增任务、依赖和验收标准；其他角色不得直接编辑
+- 任务因代码回退失去实现时改回 `🔜 待实现`，不重新编号；同步登记到 `task-numbering.md`
 
 ### `battleground-tech.md`
 
 - 删除：旧 B-prefix 步骤文档、历史验证日志、Bug 修复详细描述
 - 保留：核心接口定义、实现行为、实现文件、最新精简验证证据和已知风险
+- 只保留**一张**验证表（合并"最新验证摘要"与"精简验证证据"）；接口小节内不重复记录验证证据
 - 删除任务状态、依赖和验收标准，改为引用 `battleground-roadmap.md`
+- 已实现但**当前无调用者**的能力必须显式标注（如 `field::delete_cards`）
 
 ### `task-numbering.md`
 
 - 删除：任务表、当前状态、依赖、验收标准和实现描述
-- 保留：编号格式、分配规则、废弃规则和旧编号映射
+- 保留：编号格式、分配规则、废弃规则、状态回退记录和旧编号映射
 
-### `/memories/ygopro-battleground-mode.md`
+### `/memories/`
 
+- 本项目 `memories/` 只包含 `/memories/repo/`（`project-structure.md`、`build-commands.md`、`code-conventions.md`、`skill-links.md`），无 `ygopro-battleground-mode.md`
 - 更新：状态日期到当前日期
-- 精简：不超过 60 行
-- 同步：当前入口与 `battleground-roadmap.md` 一致，风险摘要与 `battleground-tech.md` 不冲突
-- 不复制完整任务表、玩法参数表、接口定义或单任务验证日志
+- 精简：每条目保持短句，不复制知识库正文
+- 同步：与 `battleground-roadmap.md` 的状态、`battleground-tech.md` 的风险不冲突
+- 记录代码与文档的关键差异（如回退导致的能力缺失），但详细事实仍以知识库权威文件为准
 
 ### 通用知识库（`architecture.md`、`project-overview.md` 等）
 
