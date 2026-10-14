@@ -7,2854 +7,1634 @@
 #include "data_manager.h"
 #include "../ocgcore/mtrandom.h"
 
-namespace ygo
-{
+namespace ygo {
 
-#ifdef YGOPRO_SERVER_MODE
-    extern unsigned short replay_mode;
-#endif
-    SingleDuel::SingleDuel(bool is_match)
-    {
-        match_mode = is_match;
-    }
-    SingleDuel::~SingleDuel()
-    {
-    }
-    void SingleDuel::Chat(DuelPlayer *dp, unsigned char *pdata, int len)
-    {
-        unsigned char scc[SIZE_STOC_CHAT];
-        const auto scc_size = NetServer::CreateChatPacket(pdata, len, scc, dp->type);
-        if (!scc_size)
-            return;
-        NetServer::SendBufferToPlayer(players[0], STOC_CHAT, scc, scc_size);
-        NetServer::ReSendToPlayer(players[1]);
-        for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-            NetServer::ReSendToPlayer(*pit);
-#ifdef YGOPRO_SERVER_MODE
-        if (cache_recorder)
-            NetServer::ReSendToPlayer(cache_recorder);
-        if (replay_recorder && replay_mode & REPLAY_MODE_INCLUDE_CHAT)
-            NetServer::ReSendToPlayer(replay_recorder);
-#endif
-    }
-    void SingleDuel::AbortDuelWithChat(const char16_t *message)
-    {
-        unsigned char scc[SIZE_STOC_CHAT];
-        const auto message_size = static_cast<int>((std::char_traits<char16_t>::length(message) + 1) * sizeof(char16_t));
-        const auto scc_size = NetServer::CreateSystemChatPacket(reinterpret_cast<const unsigned char *>(message), message_size, scc);
-        if (scc_size)
-        {
-            NetServer::SendBufferToPlayer(players[0], STOC_CHAT, scc, scc_size);
-            NetServer::ReSendToPlayer(players[1]);
-        }
-        EndDuel();
-    }
-    void SingleDuel::JoinGame(DuelPlayer *dp, unsigned char *pdata, bool is_creater)
-    {
-#ifdef YGOPRO_SERVER_MODE
-        bool is_recorder = false;
-#endif
-        if (!is_creater)
-        {
-            if (dp->game && dp->type != 0xff)
-            {
-                STOC_ErrorMsg scem;
-                scem.msg = ERRMSG_JOINERROR;
-                scem.code = 0;
-                NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
-                NetServer::DisconnectPlayer(dp);
-                return;
-            }
-            CTOS_JoinGame packet;
-            std::memcpy(&packet, pdata, sizeof packet);
-            auto pkt = &packet;
-            if (pkt->version != PRO_VERSION)
-            {
-                STOC_ErrorMsg scem;
-                scem.msg = ERRMSG_VERERROR;
-                scem.code = PRO_VERSION;
-                NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
-                NetServer::DisconnectPlayer(dp);
-                return;
-            }
-            wchar_t jpass[20];
-            BufferIO::NullTerminate(pkt->pass);
-            BufferIO::CopyCharArray(pkt->pass, jpass);
-#ifdef YGOPRO_SERVER_MODE
-            if (!std::wcscmp(jpass, L"the Big Brother") && !cache_recorder)
-            {
-                is_recorder = true;
-                cache_recorder = dp;
-            }
-#ifndef YGOPRO_SERVER_MODE_DISABLE_CLOUD_REPLAY
-            if (!std::wcscmp(jpass, L"Marshtomp") && !replay_recorder)
-            {
-                is_recorder = true;
-                replay_recorder = dp;
-            }
-#endif // YGOPRO_SERVER_MODE_DISABLE_CLOUD_REPLAY
-#else
-            if (std::wcscmp(jpass, pass))
-            {
-                STOC_ErrorMsg scem;
-                scem.msg = ERRMSG_JOINERROR;
-                scem.code = 1;
-                NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
-                return;
-            }
-#endif // YGOPRO_SERVER_MODE
-        }
-        dp->game = this;
-        if (!players[0] && !players[1] && observers.size() == 0)
-            host_player = dp;
-        STOC_JoinGame scjg;
-        scjg.info = host_info;
-        STOC_TypeChange sctc;
-        sctc.type = (host_player == dp) ? 0x10 : 0;
-#ifdef YGOPRO_SERVER_MODE
-        if (is_recorder)
-        {
-            dp->type = 9;
-            sctc.type = NETPLAYER_TYPE_OBSERVER;
-        }
-        else
-#endif
-            if (!players[0] || !players[1])
-        {
-            STOC_HS_PlayerEnter scpe;
-            BufferIO::CopyCharArray(dp->name, scpe.name);
-            if (!players[0])
-                scpe.pos = 0;
-            else
-                scpe.pos = 1;
-            if (players[0])
-            {
-                NetServer::SendPacketToPlayer(players[0], STOC_HS_PLAYER_ENTER, scpe);
-            }
-            if (players[1])
-            {
-                NetServer::SendPacketToPlayer(players[1], STOC_HS_PLAYER_ENTER, scpe);
-            }
-            for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_ENTER, scpe);
-#ifdef YGOPRO_SERVER_MODE
-            if (cache_recorder)
-                NetServer::SendPacketToPlayer(cache_recorder, STOC_HS_PLAYER_ENTER, scpe);
-            if (replay_recorder)
-                NetServer::SendPacketToPlayer(replay_recorder, STOC_HS_PLAYER_ENTER, scpe);
-#endif
-            if (!players[0])
-            {
-                players[0] = dp;
-                dp->type = NETPLAYER_TYPE_PLAYER1;
-                sctc.type |= NETPLAYER_TYPE_PLAYER1;
-            }
-            else
-            {
-                players[1] = dp;
-                dp->type = NETPLAYER_TYPE_PLAYER2;
-                sctc.type |= NETPLAYER_TYPE_PLAYER2;
-            }
-        }
-        else
-        {
-            observers.insert(dp);
-            dp->type = NETPLAYER_TYPE_OBSERVER;
-            sctc.type |= NETPLAYER_TYPE_OBSERVER;
-            STOC_HS_WatchChange scwc;
-            scwc.watch_count = (unsigned short)observers.size();
-            if (players[0])
-                NetServer::SendPacketToPlayer(players[0], STOC_HS_WATCH_CHANGE, scwc);
-            if (players[1])
-                NetServer::SendPacketToPlayer(players[1], STOC_HS_WATCH_CHANGE, scwc);
-            for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                NetServer::SendPacketToPlayer(*pit, STOC_HS_WATCH_CHANGE, scwc);
-#ifdef YGOPRO_SERVER_MODE
-            if (cache_recorder)
-                NetServer::SendPacketToPlayer(cache_recorder, STOC_HS_WATCH_CHANGE, scwc);
-            if (replay_recorder)
-                NetServer::SendPacketToPlayer(replay_recorder, STOC_HS_WATCH_CHANGE, scwc);
-#endif
-        }
-        NetServer::SendPacketToPlayer(dp, STOC_JOIN_GAME, scjg);
-        NetServer::SendPacketToPlayer(dp, STOC_TYPE_CHANGE, sctc);
-        if (players[0])
-        {
-            STOC_HS_PlayerEnter scpe;
-            BufferIO::CopyCharArray(players[0]->name, scpe.name);
-            scpe.pos = 0;
-            NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_ENTER, scpe);
-            if (ready[0])
-            {
-                STOC_HS_PlayerChange scpc;
-                scpc.status = PLAYERCHANGE_READY;
-                NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_CHANGE, scpc);
-            }
-        }
-        if (players[1])
-        {
-            STOC_HS_PlayerEnter scpe;
-            BufferIO::CopyCharArray(players[1]->name, scpe.name);
-            scpe.pos = 1;
-            NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_ENTER, scpe);
-            if (ready[1])
-            {
-                STOC_HS_PlayerChange scpc;
-                scpc.status = 0x10 | PLAYERCHANGE_READY;
-                NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_CHANGE, scpc);
-            }
-        }
-        if (observers.size())
-        {
-            STOC_HS_WatchChange scwc;
-            scwc.watch_count = (unsigned short)observers.size();
-            NetServer::SendPacketToPlayer(dp, STOC_HS_WATCH_CHANGE, scwc);
-        }
-    }
-    void SingleDuel::LeaveGame(DuelPlayer *dp)
-    {
-        if (dp == host_player)
-        {
-#ifdef YGOPRO_SERVER_MODE
-            int host_pos;
-            if (players[0] && dp->type != 0)
-            {
-                host_pos = 0;
-                host_player = players[0];
-            }
-            else if (players[1] && dp->type != 1)
-            {
-                host_pos = 1;
-                host_player = players[1];
-            }
-            else
-            {
-                EndDuel();
-                NetServer::StopServer();
-                return;
-            }
-            if (duel_stage == DUEL_STAGE_BEGIN)
-            {
-                ready[host_pos] = false;
-                STOC_TypeChange sctc;
-                sctc.type = 0x10 | host_pos;
-                NetServer::SendPacketToPlayer(players[host_pos], STOC_TYPE_CHANGE, sctc);
-            }
-        }
-        if (dp->type == NETPLAYER_TYPE_OBSERVER)
-        {
-#else
-            EndDuel();
-            NetServer::StopServer();
-        }
-        else if (dp->type == NETPLAYER_TYPE_OBSERVER)
-        {
-#endif // YGOPRO_SERVER_MODE
-            observers.erase(dp);
-            if (duel_stage == DUEL_STAGE_BEGIN)
-            {
-                STOC_HS_WatchChange scwc;
-                scwc.watch_count = (unsigned short)observers.size();
-                if (players[0])
-                    NetServer::SendPacketToPlayer(players[0], STOC_HS_WATCH_CHANGE, scwc);
-                if (players[1])
-                    NetServer::SendPacketToPlayer(players[1], STOC_HS_WATCH_CHANGE, scwc);
-                for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                    NetServer::SendPacketToPlayer(*pit, STOC_HS_WATCH_CHANGE, scwc);
-#ifdef YGOPRO_SERVER_MODE
-                if (cache_recorder)
-                    NetServer::SendPacketToPlayer(cache_recorder, STOC_HS_WATCH_CHANGE, scwc);
-                if (replay_recorder)
-                    NetServer::SendPacketToPlayer(replay_recorder, STOC_HS_WATCH_CHANGE, scwc);
-#endif
-            }
-            NetServer::DisconnectPlayer(dp);
-        }
-        else
-        {
-            if (duel_stage == DUEL_STAGE_BEGIN)
-            {
-                STOC_HS_PlayerChange scpc;
-                players[dp->type] = 0;
-                ready[dp->type] = false;
-                scpc.status = (dp->type << 4) | PLAYERCHANGE_LEAVE;
-                if (players[0] && dp->type != 0)
-                    NetServer::SendPacketToPlayer(players[0], STOC_HS_PLAYER_CHANGE, scpc);
-                if (players[1] && dp->type != 1)
-                    NetServer::SendPacketToPlayer(players[1], STOC_HS_PLAYER_CHANGE, scpc);
-                for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                    NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_CHANGE, scpc);
-#ifdef YGOPRO_SERVER_MODE
-                if (cache_recorder)
-                    NetServer::SendPacketToPlayer(cache_recorder, STOC_HS_PLAYER_CHANGE, scpc);
-                if (replay_recorder)
-                    NetServer::SendPacketToPlayer(replay_recorder, STOC_HS_PLAYER_CHANGE, scpc);
-#endif
-                NetServer::DisconnectPlayer(dp);
-            }
-            else
-            {
-                if (duel_stage == DUEL_STAGE_SIDING)
-                {
-                    if (!ready[0])
-                        NetServer::SendPacketToPlayer(players[0], STOC_DUEL_START);
-                    if (!ready[1])
-                        NetServer::SendPacketToPlayer(players[1], STOC_DUEL_START);
-                }
-                if (duel_stage != DUEL_STAGE_END)
-                {
-                    unsigned char wbuf[3];
-                    wbuf[0] = MSG_WIN;
-                    wbuf[1] = 1 - dp->type;
-                    wbuf[2] = 0x4;
-                    NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, wbuf, 3);
-                    NetServer::ReSendToPlayer(players[1]);
-                    for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                        NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                    NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-                    EndDuel();
-                    NetServer::SendPacketToPlayer(players[0], STOC_DUEL_END);
-                    NetServer::ReSendToPlayer(players[1]);
-                    for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                        NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                    NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-                    NetServer::StopServer();
-#endif
-                }
-#ifndef YGOPRO_SERVER_MODE
-                NetServer::DisconnectPlayer(dp);
-#endif
-            }
-        }
-    }
-    void SingleDuel::ToDuelist(DuelPlayer *dp)
-    {
-        if (dp->type != NETPLAYER_TYPE_OBSERVER)
-            return;
-        if (players[0] && players[1])
-            return;
-        observers.erase(dp);
-        STOC_HS_PlayerEnter scpe;
-        BufferIO::CopyCharArray(dp->name, scpe.name);
-        if (!players[0])
-        {
-            players[0] = dp;
-            dp->type = NETPLAYER_TYPE_PLAYER1;
-            scpe.pos = 0;
-        }
-        else
-        {
-            players[1] = dp;
-            dp->type = NETPLAYER_TYPE_PLAYER2;
-            scpe.pos = 1;
-        }
-        STOC_HS_WatchChange scwc;
-        scwc.watch_count = (unsigned short)observers.size();
-        NetServer::SendPacketToPlayer(players[0], STOC_HS_PLAYER_ENTER, scpe);
-        NetServer::SendPacketToPlayer(players[0], STOC_HS_WATCH_CHANGE, scwc);
-        if (players[1])
-        {
-            NetServer::SendPacketToPlayer(players[1], STOC_HS_PLAYER_ENTER, scpe);
-            NetServer::SendPacketToPlayer(players[1], STOC_HS_WATCH_CHANGE, scwc);
-        }
-        for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-        {
-            NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_ENTER, scpe);
-            NetServer::SendPacketToPlayer(*pit, STOC_HS_WATCH_CHANGE, scwc);
-        }
-#ifdef YGOPRO_SERVER_MODE
-        if (cache_recorder)
-        {
-            NetServer::SendPacketToPlayer(cache_recorder, STOC_HS_PLAYER_ENTER, scpe);
-            NetServer::SendPacketToPlayer(cache_recorder, STOC_HS_WATCH_CHANGE, scwc);
-        }
-        if (replay_recorder)
-        {
-            NetServer::SendPacketToPlayer(replay_recorder, STOC_HS_PLAYER_ENTER, scpe);
-            NetServer::SendPacketToPlayer(replay_recorder, STOC_HS_WATCH_CHANGE, scwc);
-        }
-#endif
-        STOC_TypeChange sctc;
-        sctc.type = (dp == host_player ? 0x10 : 0) | dp->type;
-        NetServer::SendPacketToPlayer(dp, STOC_TYPE_CHANGE, sctc);
-    }
-    void SingleDuel::ToObserver(DuelPlayer *dp)
-    {
-        if (dp->type > 1)
-            return;
-        STOC_HS_PlayerChange scpc;
-        scpc.status = (dp->type << 4) | PLAYERCHANGE_OBSERVE;
-        if (players[0])
-            NetServer::SendPacketToPlayer(players[0], STOC_HS_PLAYER_CHANGE, scpc);
-        if (players[1])
-            NetServer::SendPacketToPlayer(players[1], STOC_HS_PLAYER_CHANGE, scpc);
-        for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-            NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_CHANGE, scpc);
-#ifdef YGOPRO_SERVER_MODE
-        if (cache_recorder)
-            NetServer::SendPacketToPlayer(cache_recorder, STOC_HS_PLAYER_CHANGE, scpc);
-        if (replay_recorder)
-            NetServer::SendPacketToPlayer(replay_recorder, STOC_HS_PLAYER_CHANGE, scpc);
-#endif
-        players[dp->type] = 0;
-        ready[dp->type] = false;
-        dp->type = NETPLAYER_TYPE_OBSERVER;
-        observers.insert(dp);
-        STOC_TypeChange sctc;
-        sctc.type = (dp == host_player ? 0x10 : 0) | dp->type;
-        NetServer::SendPacketToPlayer(dp, STOC_TYPE_CHANGE, sctc);
-    }
-    void SingleDuel::PlayerReady(DuelPlayer *dp, bool is_ready)
-    {
-        if (dp->type > 1)
-            return;
-        if (ready[dp->type] == is_ready)
-            return;
-        if (is_ready)
-        {
-            uint32_t deckerror = 0;
-            if (!host_info.no_check_deck)
-            {
-                if (deck_error[dp->type])
-                {
-                    deckerror = (DECKERROR_UNKNOWNCARD << 28) | deck_error[dp->type];
-                }
-                else
-                {
-                    deckerror = deckManager.CheckDeck(pdeck[dp->type], host_info.lflist, host_info.rule);
-                }
-            }
-            if (deckerror)
-            {
-                STOC_HS_PlayerChange scpc;
-                scpc.status = (dp->type << 4) | PLAYERCHANGE_NOTREADY;
-                NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_CHANGE, scpc);
-                STOC_ErrorMsg scem;
-                scem.msg = ERRMSG_DECKERROR;
-                scem.code = deckerror;
-                NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
-                return;
-            }
-        }
-        ready[dp->type] = is_ready;
-        STOC_HS_PlayerChange scpc;
-        scpc.status = (dp->type << 4) | (is_ready ? PLAYERCHANGE_READY : PLAYERCHANGE_NOTREADY);
-        NetServer::SendPacketToPlayer(players[dp->type], STOC_HS_PLAYER_CHANGE, scpc);
-        if (players[1 - dp->type])
-            NetServer::SendPacketToPlayer(players[1 - dp->type], STOC_HS_PLAYER_CHANGE, scpc);
-        for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-            NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_CHANGE, scpc);
-#ifdef YGOPRO_SERVER_MODE
-        if (cache_recorder)
-            NetServer::SendPacketToPlayer(cache_recorder, STOC_HS_PLAYER_CHANGE, scpc);
-        if (replay_recorder)
-            NetServer::SendPacketToPlayer(replay_recorder, STOC_HS_PLAYER_CHANGE, scpc);
-#endif
-    }
-    void SingleDuel::PlayerKick(DuelPlayer *dp, unsigned char pos)
-    {
-        if (pos > 1 || dp != host_player || dp == players[pos] || !players[pos])
-            return;
-        LeaveGame(players[pos]);
-    }
-    void SingleDuel::UpdateDeck(DuelPlayer *dp, unsigned char *pdata, unsigned int len)
-    {
-        if (dp->type > 1 || ready[dp->type])
-            return;
-        if (len < sizeof(uint32_t) * 2)
-            return;
-        bool valid = true;
-        uint32_t mainc = BufferIO::Read<uint32_t>(pdata);
-        uint32_t sidec = BufferIO::Read<uint32_t>(pdata);
-        if (mainc > MAINC_MAX)
-            valid = false;
-        else if (sidec > SIDEC_MAX)
-            valid = false;
-        else if (len < (2 + mainc + sidec) * sizeof(uint32_t))
-            valid = false;
-        if (!valid)
-        {
-#ifdef YGOPRO_SERVER_MODE
-            if (duel_count == 0)
-            {
-                STOC_HS_PlayerChange scpc;
-                scpc.status = (dp->type << 4) | PLAYERCHANGE_NOTREADY;
-                NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_CHANGE, scpc);
-            }
-#endif
-            STOC_ErrorMsg scem;
-            scem.msg = ERRMSG_DECKERROR;
-            scem.code = 0;
-            NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
-            return;
-        }
-        uint32_t deckbuf[MAINC_MAX + SIDEC_MAX];
-        std::memcpy(deckbuf, pdata, (mainc + sidec) * sizeof(uint32_t));
-        if (duel_count == 0)
-        {
-            deck_error[dp->type] = DeckManager::LoadDeck(pdeck[dp->type], deckbuf, mainc, sidec);
-#ifdef YGOPRO_SERVER_MODE
-            PlayerReady(dp, true);
-#endif
-        }
-        else
-        {
-            if (DeckManager::LoadSide(pdeck[dp->type], deckbuf, mainc, sidec))
-            {
-                ready[dp->type] = true;
-                NetServer::SendPacketToPlayer(dp, STOC_DUEL_START);
-                if (ready[0] && ready[1])
-                {
-                    NetServer::SendPacketToPlayer(players[tp_player], STOC_SELECT_TP);
-                    players[1 - tp_player]->state = 0xff;
-                    players[tp_player]->state = CTOS_TP_RESULT;
-                    duel_stage = DUEL_STAGE_FIRSTGO;
-                }
-            }
-            else
-            {
-                STOC_ErrorMsg scem;
-                scem.msg = ERRMSG_SIDEERROR;
-                scem.code = 0;
-                NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
-            }
-        }
-    }
-    void SingleDuel::StartDuel(DuelPlayer *dp)
-    {
-        if (dp != host_player)
-            return;
-        if (!ready[0] || !ready[1])
-            return;
-        NetServer::StopListen();
-        // NetServer::StopBroadcast();
-        NetServer::SendPacketToPlayer(players[0], STOC_DUEL_START);
-        NetServer::ReSendToPlayer(players[1]);
-        for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-        {
-            (*oit)->state = CTOS_LEAVE_GAME;
-            NetServer::ReSendToPlayer(*oit);
-        }
-#ifdef YGOPRO_SERVER_MODE
-        if (cache_recorder)
-            cache_recorder->state = CTOS_LEAVE_GAME;
-        if (replay_recorder)
-            replay_recorder->state = CTOS_LEAVE_GAME;
-        NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-        unsigned char deckbuff[12];
-        auto pbuf = deckbuff;
-        BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[0].main.size());
-        BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[0].extra.size());
-        BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[0].side.size());
-        BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[1].main.size());
-        BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[1].extra.size());
-        BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[1].side.size());
-        NetServer::SendBufferToPlayer(players[0], STOC_DECK_COUNT, deckbuff, 12);
-        char tempbuff[6];
-        std::memcpy(tempbuff, deckbuff, 6);
-        std::memcpy(deckbuff, deckbuff + 6, 6);
-        std::memcpy(deckbuff + 6, tempbuff, 6);
-        NetServer::SendBufferToPlayer(players[1], STOC_DECK_COUNT, deckbuff, 12);
-        NetServer::SendPacketToPlayer(players[0], STOC_SELECT_HAND);
-        NetServer::ReSendToPlayer(players[1]);
-        hand_result[0] = 0;
-        hand_result[1] = 0;
-        players[0]->state = CTOS_HAND_RESULT;
-        players[1]->state = CTOS_HAND_RESULT;
-        duel_stage = DUEL_STAGE_FINGER;
-    }
-    void SingleDuel::HandResult(DuelPlayer *dp, unsigned char res)
-    {
-        if (res == 0 || res > 3 || dp->state != CTOS_HAND_RESULT)
-            return;
-        auto player = dp->type;
-        if (hand_result[player])
-            return;
-        hand_result[player] = res;
-        if (hand_result[0] && hand_result[1])
-        {
-            STOC_HandResult schr;
-            schr.res1 = hand_result[0];
-            schr.res2 = hand_result[1];
-            NetServer::SendPacketToPlayer(players[0], STOC_HAND_RESULT, schr);
-            for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-            NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-            schr.res1 = hand_result[1];
-            schr.res2 = hand_result[0];
-            NetServer::SendPacketToPlayer(players[1], STOC_HAND_RESULT, schr);
-            if (hand_result[0] == hand_result[1])
-            {
-                NetServer::SendPacketToPlayer(players[0], STOC_SELECT_HAND);
-                NetServer::ReSendToPlayer(players[1]);
-                hand_result[0] = 0;
-                hand_result[1] = 0;
-                players[0]->state = CTOS_HAND_RESULT;
-                players[1]->state = CTOS_HAND_RESULT;
-            }
-            else if ((hand_result[0] == 1 && hand_result[1] == 2) || (hand_result[0] == 2 && hand_result[1] == 3) || (hand_result[0] == 3 && hand_result[1] == 1))
-            {
-                NetServer::SendPacketToPlayer(players[1], STOC_SELECT_TP);
-                tp_player = 1;
-                players[0]->state = 0xff;
-                players[1]->state = CTOS_TP_RESULT;
-                duel_stage = DUEL_STAGE_FIRSTGO;
-            }
-            else
-            {
-                NetServer::SendPacketToPlayer(players[0], STOC_SELECT_TP);
-                players[1]->state = 0xff;
-                players[0]->state = CTOS_TP_RESULT;
-                tp_player = 0;
-                duel_stage = DUEL_STAGE_FIRSTGO;
-            }
-        }
-    }
-    void SingleDuel::TPResult(DuelPlayer *dp, unsigned char tp)
-    {
-        if (dp->state != CTOS_TP_RESULT)
-            return;
-        duel_stage = DUEL_STAGE_DUELING;
-        pplayer[0] = players[0];
-        pplayer[1] = players[1];
-        if ((tp && dp->type == 1) || (!tp && dp->type == 0))
-        {
-            std::swap(players[0], players[1]);
-            players[0]->type = 0;
-            players[1]->type = 1;
-            std::swap(pdeck[0], pdeck[1]);
-        }
-        dp->state = CTOS_RESPONSE;
-        std::random_device rd;
-        ExtendedReplayHeader rh;
-        rh.base.id = REPLAY_ID_YRP2;
-        rh.base.version = PRO_VERSION;
-        rh.base.flag = REPLAY_UNIFORM;
-        rh.base.start_time = (uint32_t)std::time(nullptr);
-#ifdef YGOPRO_SERVER_MODE
-        if (pre_seed_specified[duel_count])
-            memcpy(rh.seed_sequence, pre_seed[duel_count], SEED_COUNT * sizeof(uint32_t));
-        else
-#endif
-            for (auto &x : rh.seed_sequence)
-                x = rd();
-        mtrandom rnd(rh.seed_sequence, SEED_COUNT);
-        last_replay.BeginRecord();
-        last_replay.WriteHeader(rh);
-        last_replay.WriteData(players[0]->name, 40, false);
-        last_replay.WriteData(players[1]->name, 40, false);
-        if (!host_info.no_shuffle_deck)
-        {
-            rnd.shuffle_vector(pdeck[0].main);
-            rnd.shuffle_vector(pdeck[1].main);
-        }
-        time_limit[0] = host_info.time_limit;
-        time_limit[1] = host_info.time_limit;
-        set_script_reader(DataManager::ScriptReaderEx);
-        set_card_reader(DataManager::CardReader);
-        set_random_card_reader(DataManager::RandomCardReader);
-        set_message_handler(SingleDuel::MessageHandler);
-        pduel = create_duel_v2(rh.seed_sequence);
-        set_player_info(pduel, 0, host_info.start_lp, host_info.start_hand, host_info.draw_count);
-        set_player_info(pduel, 1, host_info.start_lp, host_info.start_hand, host_info.draw_count);
-#ifdef YGOPRO_SERVER_MODE
-        preload_script(pduel, "./script/special.lua");
-#endif
-        unsigned int opt = (unsigned int)host_info.duel_rule << 16;
-        if (host_info.no_shuffle_deck)
-            opt |= DUEL_PSEUDO_SHUFFLE;
-        last_replay.WriteInt32(host_info.start_lp, false);
-        last_replay.WriteInt32(host_info.start_hand, false);
-        last_replay.WriteInt32(host_info.draw_count, false);
-        last_replay.WriteInt32(opt, false);
-        last_replay.Flush();
-        auto load = [&](const std::vector<const CardDataC *> &deck_container, uint8_t fieldid, uint8_t p, uint8_t location)
-        {
-            last_replay.WriteInt32(deck_container.size(), false);
-            for (auto cit = deck_container.rbegin(); cit != deck_container.rend(); ++cit)
-            {
-                new_card(pduel, (*cit)->code, p, p, location, 0, POS_FACEDOWN_DEFENSE, fieldid);
-                last_replay.WriteInt32((*cit)->code, false);
-            }
-        };
-        // Field 0: only player 0 deck
-        set_active_field(pduel, 0);
-        load(pdeck[0].main, 0, 0, LOCATION_DECK);
-        load(pdeck[0].extra, 0, 0, LOCATION_EXTRA);
-        // Field 1: only player 1 deck (player 0 in field 1)
-        set_active_field(pduel, 1);
-        load(pdeck[1].main, 1, 0, LOCATION_DECK);
-        load(pdeck[1].extra, 1, 0, LOCATION_EXTRA);
-        last_replay.Flush();
-#ifdef YGOPRO_SERVER_MODE
-        turn_player = 0;
-        phase = 1;
-        deck_reversed = false;
-#endif
-        start_duel(pduel, opt);
-        if (host_info.time_limit)
-        {
-            time_elapsed = 0;
-#ifdef YGOPRO_SERVER_MODE
-            time_compensator[0] = host_info.time_limit;
-            time_compensator[1] = host_info.time_limit;
-            time_backed[0] = host_info.time_limit;
-            time_backed[1] = host_info.time_limit;
-            last_game_msg = 0;
-#endif
-            timeval timeout = {1, 0};
-            event_add(etimer, &timeout);
-        }
-        fprintf(stderr, "[DEBUG] TPResult: before Process() field 0\n");
-        Process();
-#ifdef YGOPRO_SERVER_MODE
-        set_active_field(pduel, 1);
-        active_field = 1;
-        fprintf(stderr, "[DEBUG] TPResult: before Process() field 1\n");
-        Process();
-#endif
-    }
-    void SingleDuel::Process()
-    {
-        fprintf(stderr, "[DEBUG] Process() ENTER active_field=%d\n", (int)active_field);
-        std::vector<unsigned char> engineBuffer;
-        engineBuffer.reserve(SIZE_MESSAGE_BUFFER);
-        unsigned int engFlag = 0;
-        int engLen = 0;
-        int stop = 0;
-        while (!stop)
-        {
-            if (engFlag == PROCESSOR_END)
-                break;
-            unsigned int result = process(pduel);
-            engLen = result & PROCESSOR_BUFFER_LEN;
-            engFlag = result & PROCESSOR_FLAG;
-            if (engLen > 0)
-            {
-                if (engLen > (int)engineBuffer.size())
-                    engineBuffer.resize(engLen);
-                fprintf(stderr, "[DEBUG] before get_message engLen=%d\n", engLen);
-                fflush(stderr);
-                get_message(pduel, engineBuffer.data());
-                fprintf(stderr, "[DEBUG] after get_message, msgType=0x%x, before Analyze\n", (unsigned)engineBuffer[0]);
-                fflush(stderr);
-                stop = Analyze(engineBuffer.data(), engLen);
-                fprintf(stderr, "[DEBUG] after Analyze, stop=%d\n", stop);
-                fflush(stderr);
-            }
-        }
-        if (stop == 2)
-            DuelEndProc();
-    }
-    void SingleDuel::DuelEndProc()
-    {
-        if (!match_mode)
-        {
-            NetServer::SendPacketToPlayer(players[0], STOC_DUEL_END);
-            NetServer::ReSendToPlayer(players[1]);
-            for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-            NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-            NetServer::StopServer();
-#else
-            duel_stage = DUEL_STAGE_END;
-#endif
-        }
-        else
-        {
-            int winc[3] = {0, 0, 0};
-            for (int i = 0; i < duel_count; ++i)
-                winc[match_result[i]]++;
-            if (match_kill || (winc[0] == 2 || (winc[0] == 1 && winc[2] == 2)) || (winc[1] == 2 || (winc[1] == 1 && winc[2] == 2)) || (winc[2] == 3 || (winc[0] == 1 && winc[1] == 1 && winc[2] == 1)))
-            {
-                NetServer::SendPacketToPlayer(players[0], STOC_DUEL_END);
-                NetServer::ReSendToPlayer(players[1]);
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-                NetServer::StopServer();
-#else
-                duel_stage = DUEL_STAGE_END;
-#endif
-            }
-            else
-            {
-                if (players[0] != pplayer[0])
-                {
-                    players[0] = pplayer[0];
-                    players[1] = pplayer[1];
-                    players[0]->type = 0;
-                    players[1]->type = 1;
-                    Deck d = pdeck[0];
-                    pdeck[0] = pdeck[1];
-                    pdeck[1] = d;
-                }
-                ready[0] = false;
-                ready[1] = false;
-                players[0]->state = CTOS_UPDATE_DECK;
-                players[1]->state = CTOS_UPDATE_DECK;
-                NetServer::SendPacketToPlayer(players[0], STOC_CHANGE_SIDE);
-                NetServer::SendPacketToPlayer(players[1], STOC_CHANGE_SIDE);
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::SendPacketToPlayer(*oit, STOC_WAITING_SIDE);
-#ifdef YGOPRO_SERVER_MODE
-                if (cache_recorder)
-                    NetServer::SendPacketToPlayer(cache_recorder, STOC_WAITING_SIDE);
-                if (replay_recorder)
-                    NetServer::SendPacketToPlayer(replay_recorder, STOC_WAITING_SIDE);
-#endif
-                duel_stage = DUEL_STAGE_SIDING;
-            }
-        }
-    }
-    void SingleDuel::Surrender(DuelPlayer *dp)
-    {
-        if (dp->type > 1 || !pduel)
-            return;
-        unsigned char wbuf[3];
-        uint32_t player = dp->type;
-        wbuf[0] = MSG_WIN;
-        wbuf[1] = 1 - player;
-        wbuf[2] = 0;
-        NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, wbuf, 3);
-        NetServer::ReSendToPlayer(players[1]);
-        for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-            NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-        NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-        if (players[player] == pplayer[player])
-        {
-            match_result[duel_count++] = 1 - player;
-            tp_player = player;
-        }
-        else
-        {
-            match_result[duel_count++] = player;
-            tp_player = 1 - player;
-        }
-        EndDuel();
-        DuelEndProc();
-        event_del(etimer);
-    }
-    // Analyze ocgcore message
-    int SingleDuel::Analyze(unsigned char *msgbuffer, unsigned int len)
-    {
-        unsigned char *offset, *pbufw, *pbuf = msgbuffer;
-        int player, count, type;
-#ifdef YGOPRO_SERVER_MODE
-        auto BcastObs = [&](unsigned char *buf, unsigned int size)
-        {
-            if (IsBattleField())
-            {
-                NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, buf, size);
-                NetServer::ReSendToPlayer(players[1]);
-            }
-            else
-            {
-                NetServer::SendBufferToPlayer(players[active_field], STOC_GAME_MSG, buf, size);
-            }
-            for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                NetServer::ReSendToPlayer(*oit);
-            NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-        };
-        auto RemapPlayer = [&](int engine_player)
-        {
-            return IsBattleField() ? engine_player : active_field;
-        };
-#endif
-        while (pbuf - msgbuffer < (int)len)
-        {
-            offset = pbuf;
-            unsigned char engType = BufferIO::Read<uint8_t>(pbuf);
-#ifdef YGOPRO_SERVER_MODE
-            last_game_msg = engType;
-#endif
-            fprintf(stderr, "[DEBUG] Analyze: engType=%d\n", (int)engType);
-            fflush(stderr);
-            switch (engType)
-            {
-            case MSG_RETRY:
-            {
-                if (last_replay_response_size)
-                {
-                    last_replay.RemoveData(last_replay_response_size);
-                    last_replay_response_size = 0;
-                }
-                fprintf(stderr, "[DEBUG] MSG_RETRY: last_response=%d active_field=%d Remap=%d\n", (int)last_response, (int)active_field, RemapPlayer(last_response));
-                fflush(stderr);
-                WaitforResponse(last_response);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || last_response == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(last_response)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[last_response], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_HINT:
-            {
-                type = BufferIO::Read<uint8_t>(pbuf);
-                player = BufferIO::Read<uint8_t>(pbuf);
-                BufferIO::Read<int32_t>(pbuf);
-                switch (type)
-                {
-                case 1:
-                case 2:
-                case 3:
-                case 5:
-                {
-#ifdef YGOPRO_SERVER_MODE
-                    if (IsBattleField() || player == 0)
-                        NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                    NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                    break;
-                }
-                case 4:
-                case 6:
-                case 7:
-                case 8:
-                case 9:
-                case 11:
-                {
-#ifdef YGOPRO_SERVER_MODE
-                    if (IsBattleField() || (1 - player) == 0)
-                        NetServer::SendBufferToPlayer(players[RemapPlayer(1 - player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                    NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                    for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                        NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                    NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-                    break;
-                }
-                case 10:
-                {
-#ifdef YGOPRO_SERVER_MODE
-                    BcastObs(offset, pbuf - offset);
-#else
-                    NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
-                    NetServer::SendBufferToPlayer(players[1], STOC_GAME_MSG, offset, pbuf - offset);
-                    for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                        NetServer::ReSendToPlayer(*oit);
-#endif
-                    break;
-                }
-                }
-                break;
-            }
-            case MSG_CUSTOM_CHAT:
-            {
-                const size_t remaining = len - static_cast<size_t>(pbuf - msgbuffer);
-                if (remaining < 2)
-                    return -1;
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                if (player > 1 || count == 0 || remaining - 2 < static_cast<size_t>(count) * sizeof(uint16_t))
-                    return -1;
-                std::wstring message;
-                for (int i = 0; i < count; ++i)
-                {
-                    const auto id = BufferIO::Read<uint16_t>(pbuf);
-                    message.append(dataManager.GetSysString(id));
-                }
-                if (!IsBattleField() && player != 0)
-                    break;
-                uint16_t message_utf16[LEN_CHAT_MSG]{};
-                size_t utf16_length = 0;
-                bool message_too_long = false;
-                for (const wchar_t character : message)
-                {
-                    const uint32_t codepoint = static_cast<uint32_t>(character);
-                    const size_t code_unit_count = codepoint <= 0xffff ? 1 : codepoint <= 0x10ffff ? 2
-                                                                                                   : 0;
-                    if (utf16_length + code_unit_count >= LEN_CHAT_MSG)
-                    {
-                        message_too_long = true;
-                        break;
-                    }
-                    if (code_unit_count == 1)
-                    {
-                        message_utf16[utf16_length++] = static_cast<uint16_t>(codepoint);
-                    }
-                    else if (code_unit_count == 2)
-                    {
-                        const uint32_t surrogate = codepoint - 0x10000;
-                        message_utf16[utf16_length++] = static_cast<uint16_t>(0xd800 + (surrogate >> 10));
-                        message_utf16[utf16_length++] = static_cast<uint16_t>(0xdc00 + (surrogate & 0x3ff));
-                    }
-                }
-                if (message_too_long)
-                    break;
-                unsigned char scc[SIZE_STOC_CHAT];
-                const auto message_size = static_cast<int>((utf16_length + 1) * sizeof(uint16_t));
-                const auto scc_size = NetServer::CreateSystemChatPacket(reinterpret_cast<const unsigned char *>(message_utf16), message_size, scc);
-                if (!scc_size)
-                    break;
-                NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_CHAT, scc, scc_size);
-                break;
-            }
-            case MSG_WIN:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                type = BufferIO::Read<uint8_t>(pbuf);
-                BcastObs(offset, pbuf - offset);
-                if (player > 1)
-                {
-                    match_result[duel_count++] = 2;
-                    tp_player = 1 - tp_player;
-                }
-                else if (players[player] == pplayer[player])
-                {
-                    match_result[duel_count++] = player;
-                    tp_player = 1 - player;
-                }
-                else
-                {
-                    match_result[duel_count++] = 1 - player;
-                    tp_player = player;
-                }
-                EndDuel();
-                return 2;
-            }
-            case MSG_SELECT_BATTLECMD:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 11;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 8 + 2;
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                RefreshHand(0);
-                RefreshHand(1);
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_IDLECMD:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 7;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 7;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 7;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 7;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 7;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 11 + 3;
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                RefreshHand(0);
-                RefreshHand(1);
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_EFFECTYN:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 12;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_YESNO:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 4;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_OPTION:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 4;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_CARD:
-            case MSG_SELECT_TRIBUTE:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 3;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                int c /*, l, s, ss, code*/;
-                for (int i = 0; i < count; ++i)
-                {
-                    pbufw = pbuf;
-                    /*code = */ BufferIO::Read<int32_t>(pbuf);
-                    c = BufferIO::Read<uint8_t>(pbuf);
-                    /*l = */ BufferIO::Read<uint8_t>(pbuf);
-                    /*s = */ BufferIO::Read<uint8_t>(pbuf);
-                    /*ss = */ BufferIO::Read<uint8_t>(pbuf);
-                    if (c != player)
-                        BufferIO::Write<int32_t>(pbufw, 0);
-                }
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_UNSELECT_CARD:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 4;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                int c /*, l, s, ss, code*/;
-                for (int i = 0; i < count; ++i)
-                {
-                    pbufw = pbuf;
-                    /*code = */ BufferIO::Read<int32_t>(pbuf);
-                    c = BufferIO::Read<uint8_t>(pbuf);
-                    /*l = */ BufferIO::Read<uint8_t>(pbuf);
-                    /*s = */ BufferIO::Read<uint8_t>(pbuf);
-                    /*ss = */ BufferIO::Read<uint8_t>(pbuf);
-                    if (c != player)
-                        BufferIO::Write<int32_t>(pbufw, 0);
-                }
-                count = BufferIO::Read<uint8_t>(pbuf);
-                for (int i = 0; i < count; ++i)
-                {
-                    pbufw = pbuf;
-                    /*code = */ BufferIO::Read<int32_t>(pbuf);
-                    c = BufferIO::Read<uint8_t>(pbuf);
-                    /*l = */ BufferIO::Read<uint8_t>(pbuf);
-                    /*s = */ BufferIO::Read<uint8_t>(pbuf);
-                    /*ss = */ BufferIO::Read<uint8_t>(pbuf);
-                    if (c != player)
-                        BufferIO::Write<int32_t>(pbufw, 0);
-                }
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_CHAIN:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 9 + count * 14;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_PLACE:
-            case MSG_SELECT_DISFIELD:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 5;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_POSITION:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 5;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_COUNTER:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 4;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 9;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SELECT_SUM:
-            {
-                pbuf++;
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 6;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 11;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 11;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_SORT_CARD:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 7;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_CONFIRM_DECKTOP:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 7;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_CONFIRM_EXTRATOP:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 7;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_CONFIRM_CARDS:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 1;
-                count = BufferIO::Read<uint8_t>(pbuf);
-                if (pbuf[5] != LOCATION_DECK)
-                {
-                    pbuf += count * 7;
-#ifdef YGOPRO_SERVER_MODE
-                    if (IsBattleField() || player == 0)
-                        NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-                    if (IsBattleField() || (1 - player) == 0)
-                        NetServer::SendBufferToPlayer(players[RemapPlayer(1 - player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                    NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-                    NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                    for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                        NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                    NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-                }
-                else
-                {
-                    pbuf += count * 7;
-#ifdef YGOPRO_SERVER_MODE
-                    if (IsBattleField() || player == 0)
-                        NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                    NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                }
-                break;
-            }
-            case MSG_SHUFFLE_DECK:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_SHUFFLE_HAND:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                {
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, (pbuf - offset) + count * 4);
-                    NetServer::ReSendToPlayer(replay_recorder);
-                }
-                for (int i = 0; i < count; ++i)
-                    BufferIO::Write<int32_t>(pbuf, 0);
-                if (IsBattleField() || (1 - player) == 0)
-                {
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(1 - player)], STOC_GAME_MSG, offset, pbuf - offset);
-                    for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                        NetServer::ReSendToPlayer(*oit);
-                    NetServer::ReSendToPlayer(cache_recorder);
-                }
-                RefreshHand(player, 0x781fff, 0, active_field);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, (pbuf - offset) + count * 4);
-                for (int i = 0; i < count; ++i)
-                    BufferIO::Write<int32_t>(pbuf, 0);
-                NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-                RefreshHand(player, 0x781fff, 0);
-#endif
-                break;
-            }
-            case MSG_SHUFFLE_EXTRA:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                {
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, (pbuf - offset) + count * 4);
-                    NetServer::ReSendToPlayer(replay_recorder);
-                }
-                for (int i = 0; i < count; ++i)
-                    BufferIO::Write<int32_t>(pbuf, 0);
-                if (IsBattleField() || (1 - player) == 0)
-                {
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(1 - player)], STOC_GAME_MSG, offset, pbuf - offset);
-                    for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                        NetServer::ReSendToPlayer(*oit);
-                    NetServer::ReSendToPlayer(cache_recorder);
-                }
-                RefreshExtra(player, 0xe81fff, 1, active_field);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, (pbuf - offset) + count * 4);
-                for (int i = 0; i < count; ++i)
-                    BufferIO::Write<int32_t>(pbuf, 0);
-                NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-                RefreshExtra(player);
-#endif
-                break;
-            }
-            case MSG_REFRESH_DECK:
-            {
-                pbuf++;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_SWAP_GRAVE_DECK:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                BcastObs(offset, pbuf - offset);
-#ifdef YGOPRO_SERVER_MODE
-                RefreshGrave(player, 0x681fff, 1, active_field);
-#else
-                RefreshGrave(player);
-#endif
-                break;
-            }
-            case MSG_REVERSE_DECK:
-            {
-#ifdef YGOPRO_SERVER_MODE
-                BcastObs(offset, pbuf - offset);
-                deck_reversed = !deck_reversed;
-#else
-                NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
-                NetServer::ReSendToPlayer(players[1]);
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-#endif
-                break;
-            }
-            case MSG_DECK_TOP:
-            {
-                pbuf += 6;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_SHUFFLE_SET_CARD:
-            {
-                unsigned int loc = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 8;
-                BcastObs(offset, pbuf - offset);
-                if (loc == LOCATION_MZONE)
-                {
-#ifdef YGOPRO_SERVER_MODE
-                    if (IsBattleField())
-                    {
-                        RefreshMzone(0, 0x181fff, 0);
-                        RefreshMzone(1, 0x181fff, 0);
-                    }
-                    else
-                    {
-                        RefreshMzone(active_field, 0x181fff, 0, active_field);
-                    }
-#else
-                    RefreshMzone(0, 0x181fff, 0);
-                    RefreshMzone(1, 0x181fff, 0);
-#endif
-                }
-                else
-                {
-#ifdef YGOPRO_SERVER_MODE
-                    if (IsBattleField())
-                    {
-                        RefreshSzone(0, 0x181fff, 0);
-                        RefreshSzone(1, 0x181fff, 0);
-                    }
-                    else
-                    {
-                        RefreshSzone(active_field, 0x181fff, 0, active_field);
-                    }
-#else
-                    RefreshSzone(0, 0x181fff, 0);
-                    RefreshSzone(1, 0x181fff, 0);
-#endif
-                }
-                break;
-            }
-            case MSG_NEW_TURN:
-            {
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                RefreshHand(0);
-                RefreshHand(1);
-#ifdef YGOPRO_SERVER_MODE
-                turn_player = BufferIO::Read<uint8_t>(pbuf);
-#else
-                pbuf++;
-#endif
-                time_limit[0] = host_info.time_limit;
-                time_limit[1] = host_info.time_limit;
-#ifdef YGOPRO_SERVER_MODE
-                time_compensator[0] = host_info.time_limit;
-                time_compensator[1] = host_info.time_limit;
-                time_backed[0] = host_info.time_limit;
-                time_backed[1] = host_info.time_limit;
-#endif
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-#ifdef YGOPRO_SERVER_MODE
-            case MSG_CHANGE_FIELD:
-            {
-                if (!IsBattleField())
-                {
-                    if (able_to_bp)
-                    {
-                        const uint8_t battle_field = 4;
-                        const uint8_t battle_turn_player = battle_turn_counter % 2;
-                        set_active_field(pduel, battle_field);
-                        if (merge_field_to_bp(pduel, battle_field, 0, 1, battle_turn_player) != TRUE)
-                        {
-                            AbortDuelWithChat(u"merge_field_to_bp failed; duel terminated.");
-                            return 2;
-                        }
-                        ++battle_turn_counter;
-                        active_field = battle_field;
-                        Process();
-                    }
-                    able_to_bp = true;
-                }
-                else
-                {
-                    able_to_bp = false;
-                    set_active_field(pduel, 4);
-                    if (return_field_to_main(pduel, 4) != TRUE)
-                    {
-                        AbortDuelWithChat(u"return_field_to_main failed; duel terminated.");
-                        return 2;
-                    }
-                    set_active_field(pduel, 0);
-                    active_field = 0;
-                    Process();
-                    set_active_field(pduel, 1);
-                    active_field = 1;
-                    Process();
-                }
-                return 1;
-            }
-            case MSG_BATTLEGROUND_FATAL:
-            {
-                const size_t remaining = len - static_cast<size_t>(pbuf - msgbuffer);
-                if (remaining < 1)
-                    return -1;
-                const auto reason = BufferIO::Read<uint8_t>(pbuf);
-                if (reason == BATTLEGROUND_FATAL_RETURN_FIELD)
-                    AbortDuelWithChat(u"return_field_to_main failed; duel terminated.");
-                else
-                    AbortDuelWithChat(u"Battleground internal error; duel terminated.");
-                return 2;
-            }
-#endif
-            case MSG_NEW_PHASE:
-            {
-#ifdef YGOPRO_SERVER_MODE
-                phase = BufferIO::Read<uint16_t>(pbuf);
-#else
-                pbuf += 2;
-#endif
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                RefreshHand(0);
-                RefreshHand(1);
-                break;
-            }
-            case MSG_MOVE:
-            {
-                pbufw = pbuf;
-                int pc = pbuf[4];
-                int pl = pbuf[5];
-                /*int ps = pbuf[6];*/
-                /*int pp = pbuf[7];*/
-                int cc = pbuf[8];
-                int cl = pbuf[9];
-                int cs = pbuf[10];
-                uint8_t cp = pbuf[11];
-                fprintf(stderr, "[DEBUG] MSG_MOVE: cc=%d pc=%d cl=%d pl=%d active_field=%d IsBattleField=%d\n", cc, pc, cl, pl, (int)active_field, (int)IsBattleField());
-                fflush(stderr);
-                const bool hide_code = NetServer::ShouldHideFacedownCode(cp);
-                if (cl & LOCATION_ONFIELD)
-                    cp = NetServer::StripRevealFlag(pbufw, 8);
-                pbuf += 16;
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || cc == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(cc)], STOC_GAME_MSG, offset, pbuf - offset);
-                if (!(cl & (LOCATION_GRAVE | LOCATION_OVERLAY)) && ((cl & (LOCATION_DECK | LOCATION_HAND)) || hide_code))
-                    BufferIO::Write<int32_t>(pbufw, 0);
-                if (IsBattleField() || (1 - cc) == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(1 - cc)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[cc], STOC_GAME_MSG, offset, pbuf - offset);
-                if (!(cl & (LOCATION_GRAVE | LOCATION_OVERLAY)) && ((cl & (LOCATION_DECK | LOCATION_HAND)) || hide_code))
-                    BufferIO::Write<int32_t>(pbufw, 0);
-                NetServer::SendBufferToPlayer(players[1 - cc], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-                if (cl != 0 && (cl & LOCATION_OVERLAY) == 0 && (cl != pl || pc != cc))
-                    RefreshSingle(cc, cl, cs);
-                break;
-            }
-            case MSG_POS_CHANGE:
-            {
-                int cc = pbuf[4];
-                int cl = pbuf[5];
-                int cs = pbuf[6];
-                int pp = pbuf[7];
-                int cp = pbuf[8];
-                pbuf += 9;
-                BcastObs(offset, pbuf - offset);
-                if ((pp & POS_FACEDOWN) && (cp & POS_FACEUP))
-                    RefreshSingle(cc, cl, cs);
-                break;
-            }
-            case MSG_SET:
-            {
-                BufferIO::Write<int32_t>(pbuf, 0);
-                pbuf += 4;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_SWAP:
-            {
-                int c1 = pbuf[4];
-                int l1 = pbuf[5];
-                int s1 = pbuf[6];
-                int c2 = pbuf[12];
-                int l2 = pbuf[13];
-                int s2 = pbuf[14];
-                pbuf += 16;
-                BcastObs(offset, pbuf - offset);
-                RefreshSingle(c1, l1, s1);
-                RefreshSingle(c2, l2, s2);
-                break;
-            }
-            case MSG_FIELD_DISABLED:
-            {
-                pbuf += 4;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_SUMMONING:
-            {
-                pbuf += 8;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_SUMMONED:
-            {
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                break;
-            }
-            case MSG_SPSUMMONING:
-            {
-                pbufw = pbuf;
-                int cc = pbuf[4];
-                /*int cl = pbuf[5];*/
-                /*int cs = pbuf[6];*/
-                uint8_t cp = pbuf[7];
-                const bool hide_code = NetServer::ShouldHideFacedownCode(cp);
-                cp = NetServer::StripRevealFlag(pbufw, 4);
-                pbuf += 8;
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || cc == 0)
-                {
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(cc)], STOC_GAME_MSG, offset, pbuf - offset);
-                    NetServer::ReSendToPlayer(replay_recorder);
-                }
-                if (hide_code)
-                    BufferIO::Write<int32_t>(pbufw, 0);
-                if (IsBattleField() || (1 - cc) == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(1 - cc)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[cc], STOC_GAME_MSG, offset, pbuf - offset);
-                if (hide_code)
-                    BufferIO::Write<int32_t>(pbufw, 0);
-                NetServer::SendBufferToPlayer(players[1 - cc], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                NetServer::ReSendToPlayer(cache_recorder);
-#endif
-                break;
-            }
-            case MSG_SPSUMMONED:
-            {
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                break;
-            }
-            case MSG_FLIPSUMMONING:
-            {
-                RefreshSingle(pbuf[4], pbuf[5], pbuf[6]);
-                pbuf += 8;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_FLIPSUMMONED:
-            {
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                break;
-            }
-            case MSG_CHAINING:
-            {
-                pbuf += 16;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_CHAINED:
-            {
-                pbuf++;
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                RefreshHand(0);
-                RefreshHand(1);
-                break;
-            }
-            case MSG_CHAIN_SOLVING:
-            {
-                pbuf++;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_CHAIN_SOLVED:
-            {
-                pbuf++;
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                RefreshHand(0);
-                RefreshHand(1);
-                break;
-            }
-            case MSG_CHAIN_END:
-            {
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                RefreshSzone(0);
-                RefreshSzone(1);
-                RefreshHand(0);
-                RefreshHand(1);
-                break;
-            }
-            case MSG_CHAIN_NEGATED:
-            {
-                pbuf++;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_CHAIN_DISABLED:
-            {
-                pbuf++;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_CARD_SELECTED:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 4;
-                break;
-            }
-            case MSG_RANDOM_SELECTED:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 4;
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-                if (IsBattleField() || (1 - player) == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(1 - player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-                NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-                break;
-            }
-            case MSG_BECOME_TARGET:
-            {
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count * 4;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_DRAW:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                fprintf(stderr, "[DEBUG] MSG_DRAW: engine_player=%d active_field=%d IsBattleField=%d\n", player, (int)active_field, (int)IsBattleField());
-                fflush(stderr);
-                pbufw = pbuf;
-                pbuf += count * 4;
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                {
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-                    NetServer::ReSendToPlayer(replay_recorder);
-                }
-                for (int i = 0; i < count; ++i)
-                {
-                    if (!(pbufw[3] & 0x80))
-                        BufferIO::Write<int32_t>(pbufw, 0);
-                    else
-                        pbufw += 4;
-                }
-                if (IsBattleField() || (1 - player) == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(1 - player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-                for (int i = 0; i < count; ++i)
-                {
-                    if (!(pbufw[3] & 0x80))
-                        BufferIO::Write<int32_t>(pbufw, 0);
-                    else
-                        pbufw += 4;
-                }
-                NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-                NetServer::ReSendToPlayer(cache_recorder);
-#endif
-                break;
-            }
-            case MSG_DAMAGE:
-            {
-                pbuf += 5;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_RECOVER:
-            {
-                pbuf += 5;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_EQUIP:
-            {
-                pbuf += 8;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_LPUPDATE:
-            {
-                pbuf += 5;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_UNEQUIP:
-            {
-                pbuf += 4;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_CARD_TARGET:
-            {
-                pbuf += 8;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_CANCEL_TARGET:
-            {
-                pbuf += 8;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_PAY_LPCOST:
-            {
-                pbuf += 5;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_ADD_COUNTER:
-            {
-                pbuf += 7;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_REMOVE_COUNTER:
-            {
-                pbuf += 7;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_ATTACK:
-            {
-                pbuf += 8;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_BATTLE:
-            {
-                pbuf += 26;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_ATTACK_DISABLED:
-            {
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_DAMAGE_STEP_START:
-            {
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                break;
-            }
-            case MSG_DAMAGE_STEP_END:
-            {
-                BcastObs(offset, pbuf - offset);
-                RefreshMzone(0);
-                RefreshMzone(1);
-                break;
-            }
-            case MSG_MISSED_EFFECT:
-            {
-                player = pbuf[0];
-                pbuf += 8;
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                break;
-            }
-            case MSG_TOSS_COIN:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_TOSS_DICE:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += count;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_ROCK_PAPER_SCISSORS:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_HAND_RES:
-            {
-                pbuf += 1;
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField())
-                {
-                    NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
-                    NetServer::SendBufferToPlayer(players[1], STOC_GAME_MSG, offset, pbuf - offset);
-                }
-#else
-                NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
-                NetServer::SendBufferToPlayer(players[1], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::ReSendToPlayer(*oit);
-                break;
-            }
-            case MSG_ANNOUNCE_RACE:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 5;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_ANNOUNCE_ATTRIB:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 5;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_ANNOUNCE_CARD:
-            case MSG_ANNOUNCE_NUMBER:
-            {
-                player = BufferIO::Read<uint8_t>(pbuf);
-                count = BufferIO::Read<uint8_t>(pbuf);
-                pbuf += 4 * count;
-                WaitforResponse(player);
-#ifdef YGOPRO_SERVER_MODE
-                if (IsBattleField() || player == 0)
-                    NetServer::SendBufferToPlayer(players[RemapPlayer(player)], STOC_GAME_MSG, offset, pbuf - offset);
-#else
-                NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
-#endif
-                return 1;
-            }
-            case MSG_CARD_HINT:
-            {
-                pbuf += 9;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-            case MSG_PLAYER_HINT:
-            {
-                pbuf += 6;
-                BcastObs(offset, pbuf - offset);
-                break;
-            }
-#ifdef YGOPRO_SERVER_MODE
-            case MSG_FIELD_READY:
-            {
-                const auto turn_player_from_engine = BufferIO::Read<uint8_t>(pbuf);
-                const auto lp0 = BufferIO::Read<uint8_t>(pbuf);
-                const auto lp1 = BufferIO::Read<uint8_t>(pbuf);
-                const uint8_t ready_field = active_field;
-                // engine 信号：field 初始化完成，构建并发送 MSG_START
-                unsigned char startbuf[32]{};
-                auto pbuf = startbuf;
-                BufferIO::Write<uint8_t>(pbuf, MSG_START);
-                BufferIO::Write<uint8_t>(pbuf, 0);
-                BufferIO::Write<uint8_t>(pbuf, host_info.duel_rule);
-                BufferIO::Write<int32_t>(pbuf, lp0);
-                BufferIO::Write<int32_t>(pbuf, lp1);
-                if (!IsBattleField())
-                {
-                    // 非战斗场：只发本 field 家园主，对手数据填 0
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 0, LOCATION_DECK));
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 0, LOCATION_EXTRA));
-                    BufferIO::Write<uint16_t>(pbuf, 0);
-                    BufferIO::Write<uint16_t>(pbuf, 0);
-                    NetServer::SendBufferToPlayer(players[ready_field], STOC_GAME_MSG, startbuf, 19);
-                }
-                else
-                {
-                    // 战斗场：使用 engine 计算的 turn_player
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 0, LOCATION_DECK));
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 0, LOCATION_EXTRA));
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 1, LOCATION_DECK));
-                    BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, ready_field, 1, LOCATION_EXTRA));
-                    startbuf[1] = turn_player_from_engine;
-                    NetServer::SendBufferToPlayer(players[turn_player_from_engine], STOC_GAME_MSG, startbuf, 19);
-                    startbuf[1] = 1 - turn_player_from_engine;
-                    NetServer::SendBufferToPlayer(players[1 - turn_player_from_engine], STOC_GAME_MSG, startbuf, 19);
-                }
-                // observers/recorders 始终发送
-                for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                    NetServer::SendBufferToPlayer(*oit, STOC_GAME_MSG, startbuf, 19);
-                if (cache_recorder)
-                    NetServer::SendBufferToPlayer(cache_recorder, STOC_GAME_MSG, startbuf, 19);
-                if (replay_recorder)
-                    NetServer::SendBufferToPlayer(replay_recorder, STOC_GAME_MSG, startbuf, 19);
-                // 全量刷新：参考 RequestField 刷新双方所有区域
-                {
-                    uint8_t refresh_buf[1024];
-                    auto write_refresh_msg = [&](const std::function<void(uint8_t *&)> &writer, DuelPlayer *target)
-                    {
-                        uint8_t *pbuf = refresh_buf;
-                        writer(pbuf);
-                        NetServer::SendBufferToPlayer(target, STOC_GAME_MSG, refresh_buf, pbuf - refresh_buf);
-                    };
-                    auto send_deck_top = [&](uint8_t field, DuelPlayer *target)
-                    {
-                        uint8_t query_buffer[SIZE_QUERY_BUFFER];
-                        for (uint8_t i = 0; i < 2; ++i)
-                        {
-                            auto qlen = query_field_card(pduel, field, i, LOCATION_DECK, QUERY_CODE | QUERY_POSITION, query_buffer, 0);
-                            if (!qlen)
-                                continue;
-                            uint8_t *qbuf = query_buffer;
-                            uint32_t code = 0;
-                            uint32_t position = 0;
-                            while (qbuf < query_buffer + qlen)
-                            {
-                                auto clen = BufferIO::Read<int32_t>(qbuf);
-                                if (qbuf + clen - 4 == query_buffer + qlen)
-                                {
-                                    code = *(uint32_t *)(qbuf + 4);
-                                    position = GetPosition(qbuf, 8);
-                                }
-                                qbuf += clen - 4;
-                            }
-                            if (position & POS_FACEUP)
-                                code |= 0x80000000;
-                            if (deck_reversed || position & POS_FACEUP)
-                                write_refresh_msg([&](uint8_t *&wpbuf)
-                                                  {
-                                    BufferIO::Write<uint8_t>(wpbuf, MSG_DECK_TOP);
-                                    BufferIO::Write<uint8_t>(wpbuf, i);
-                                    BufferIO::Write<uint8_t>(wpbuf, 0);
-                                    BufferIO::Write<int32_t>(wpbuf, code); }, target);
-                        }
-                    };
-                    if (!IsBattleField())
-                    {
-                        // 非战斗场：刷新双方数据，只发给本 field 家园主
-                        auto target = players[ready_field];
-                        // query_field_info
-                        {
-                            uint8_t qfi_buf[SIZE_QUERY_BUFFER];
-                            auto len = query_field_info(pduel, ready_field, qfi_buf);
-                            NetServer::SendBufferToPlayer(target, STOC_GAME_MSG, qfi_buf, len);
-                        }
-                        RefreshMzone(0, 0xefffff, 0, ready_field);
-                        RefreshMzone(1, 0xefffff, 0, ready_field);
-                        RefreshSzone(0, 0xefffff, 0, ready_field);
-                        RefreshSzone(1, 0xefffff, 0, ready_field);
-                        RefreshHand(0, 0xefffff, 0, ready_field);
-                        RefreshHand(1, 0xefffff, 0, ready_field);
-                        RefreshGrave(0, 0xefffff, 0, ready_field);
-                        RefreshGrave(1, 0xefffff, 0, ready_field);
-                        RefreshExtra(0, 0xefffff, 0, ready_field);
-                        RefreshExtra(1, 0xefffff, 0, ready_field);
-                        RefreshRemoved(0, 0xefffff, 0, ready_field);
-                        RefreshRemoved(1, 0xefffff, 0, ready_field);
-                        if (deck_reversed)
-                            write_refresh_msg([&](uint8_t *&wpbuf)
-                                              { BufferIO::Write<uint8_t>(wpbuf, MSG_REVERSE_DECK); }, target);
-                        send_deck_top(ready_field, target);
-                    }
-                    else
-                    {
-                        // 战斗场：分别发给双方玩家
-                        for (uint8_t p = 0; p < 2; ++p)
-                        {
-                            auto target = players[p];
-                            // query_field_info
-                            {
-                                uint8_t qfi_buf[SIZE_QUERY_BUFFER];
-                                auto len = query_field_info(pduel, ready_field, qfi_buf);
-                                NetServer::SendBufferToPlayer(target, STOC_GAME_MSG, qfi_buf, len);
-                            }
-                            RefreshMzone(0, 0xefffff, 0, ready_field, target);
-                            RefreshMzone(1, 0xefffff, 0, ready_field, target);
-                            RefreshSzone(0, 0xefffff, 0, ready_field, target);
-                            RefreshSzone(1, 0xefffff, 0, ready_field, target);
-                            RefreshHand(0, 0xefffff, 0, ready_field, target);
-                            RefreshHand(1, 0xefffff, 0, ready_field, target);
-                            RefreshGrave(0, 0xefffff, 0, ready_field, target);
-                            RefreshGrave(1, 0xefffff, 0, ready_field, target);
-                            RefreshExtra(0, 0xefffff, 0, ready_field, target);
-                            RefreshExtra(1, 0xefffff, 0, ready_field, target);
-                            RefreshRemoved(0, 0xefffff, 0, ready_field, target);
-                            RefreshRemoved(1, 0xefffff, 0, ready_field, target);
-                            if (deck_reversed)
-                                write_refresh_msg([&](uint8_t *&wpbuf)
-                                                  { BufferIO::Write<uint8_t>(wpbuf, MSG_REVERSE_DECK); }, target);
-                            send_deck_top(ready_field, target);
-                        }
-                    }
-                }
-                break;
-            }
-#endif
-            case MSG_MATCH_KILL:
-            {
-                int code = BufferIO::Read<int32_t>(pbuf);
-                if (match_mode)
-                {
-                    match_kill = code;
-#ifdef YGOPRO_SERVER_MODE
-                    BcastObs(offset, pbuf - offset);
-#else
-                    NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
-                    NetServer::ReSendToPlayer(players[1]);
-                    for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                        NetServer::ReSendToPlayer(*oit);
-#endif
-                }
-                break;
-            }
-            }
-        }
-        return 0;
-    }
-    void SingleDuel::GetResponse(DuelPlayer *dp, unsigned char *pdata, unsigned int len)
-    {
-        unsigned char resb[SIZE_RETURN_VALUE]{};
-        if (len > UINT8_MAX)
-            len = UINT8_MAX;
-        std::memcpy(resb, pdata, len);
-        last_replay_response_size = last_replay.WriteResponse(resb, len);
-#ifdef YGOPRO_SERVER_MODE
-        fprintf(stderr, "[DEBUG] GetResponse ENTER: dp->type=%d active_field=%d len=%u\n", (int)dp->type, (int)active_field, len);
-        fflush(stderr);
-        if (dp->type <= 1 && !IsBattleField())
-        {
-            set_active_field(pduel, dp->type);
-            active_field = dp->type;
-        }
-#endif
-        set_responseb(pduel, resb);
-        players[dp->type]->state = 0xff;
-        if (host_info.time_limit)
-        {
-            if (time_limit[dp->type] >= time_elapsed)
-                time_limit[dp->type] -= time_elapsed;
-            else
-                time_limit[dp->type] = 0;
-            time_elapsed = 0;
-#ifdef YGOPRO_SERVER_MODE
-            if (time_backed[dp->type] > 0 && time_limit[dp->type] < host_info.time_limit && NetServer::IsCanIncreaseTime(last_game_msg, pdata, len))
-            {
-                ++time_limit[dp->type];
-                ++time_compensator[dp->type];
-                --time_backed[dp->type];
-            }
-#endif
-        }
-        Process();
-        last_replay_response_size = 0;
-    }
-    void SingleDuel::EndDuel()
-    {
-        if (!pduel)
-            return;
-        last_replay.EndRecord();
-        std::vector<unsigned char> replay_buffer;
-        replay_buffer.reserve(sizeof last_replay.pheader + last_replay.comp_size);
-        BufferIO::VectorWrite(replay_buffer, last_replay.pheader);
-        BufferIO::VectorWriteBlock(replay_buffer, last_replay.comp_data, last_replay.comp_size);
-        NetServer::SendBufferToPlayer(players[0], STOC_REPLAY, replay_buffer.data(), replay_buffer.size());
-        NetServer::ReSendToPlayer(players[1]);
-#ifdef YGOPRO_SERVER_MODE
-        if (!(replay_mode & REPLAY_MODE_WATCHER_NO_SEND))
-        {
-            for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-                NetServer::ReSendToPlayer(*oit);
-            NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-        }
-        else
-        {
-            NetServer::ReSendToPlayer(replay_recorder);
-        }
-#else
-        for (auto oit = observers.begin(); oit != observers.end(); ++oit)
-            NetServer::ReSendToPlayer(*oit);
-#endif // YGOPRO_SERVER_MODE
-        end_duel(pduel);
-        event_del(etimer);
-        pduel = 0;
-    }
-    void SingleDuel::WaitforResponse(int playerid)
-    {
-        fprintf(stderr, "[DEBUG] WaitforResponse: playerid=%d active_field=%d\n", (int)playerid, (int)active_field);
-        fflush(stderr);
-#ifdef YGOPRO_SERVER_MODE
-        if (!IsBattleField())
-            playerid = active_field;
-#endif
-        last_response = playerid;
-#ifdef YGOPRO_SERVER_MODE
-        if (IsBattleField())
-        {
-#endif
-            unsigned char msg = MSG_WAITING;
-            NetServer::SendPacketToPlayer(players[1 - playerid], STOC_GAME_MSG, msg);
-#ifdef YGOPRO_SERVER_MODE
-        }
-#endif
-        if (host_info.time_limit)
-        {
-            STOC_TimeLimit sctl;
-            sctl.player = playerid;
-            sctl.left_time = time_limit[playerid];
-#ifdef YGOPRO_SERVER_MODE
-            if (IsBattleField())
-            {
-#endif
-                NetServer::SendPacketToPlayer(players[0], STOC_TIME_LIMIT, sctl);
-                NetServer::SendPacketToPlayer(players[1], STOC_TIME_LIMIT, sctl);
-#ifdef YGOPRO_SERVER_MODE
-            }
-            else
-            {
-                NetServer::SendPacketToPlayer(players[playerid], STOC_TIME_LIMIT, sctl);
-            }
-#endif
-            players[playerid]->state = CTOS_TIME_CONFIRM;
-        }
-        else
-            players[playerid]->state = CTOS_RESPONSE;
-
-        fprintf(stderr, "[DEBUG] WaitforResponseAfterRewrite: playerid=%d active_field=%d\n", (int)playerid, (int)active_field);
-        fflush(stderr);
-    }
-#ifdef YGOPRO_SERVER_MODE
-    void SingleDuel::RequestField(DuelPlayer *dp)
-    {
-        if (dp->type > 1)
-            return;
-        uint8_t player = dp->type;
-        NetServer::SendPacketToPlayer(dp, STOC_DUEL_START);
-
-        uint8_t buf[1024];
-        uint8_t *temp_buf = buf;
-        auto WriteMsg = [&](const std::function<void(uint8_t *&)> &writer)
-        {
-            temp_buf = buf;
-            writer(temp_buf);
-            NetServer::SendBufferToPlayer(dp, STOC_GAME_MSG, buf, temp_buf - buf);
-        };
-
-        WriteMsg([&](uint8_t *&pbuf)
-                 {
-		BufferIO::Write<uint8_t>(pbuf, MSG_START);
-		BufferIO::Write<uint8_t>(pbuf, player);
-		BufferIO::Write<uint8_t>(pbuf, host_info.duel_rule);
-		BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
-		BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
-		BufferIO::Write<uint16_t>(pbuf, 0);
-		BufferIO::Write<uint16_t>(pbuf, 0);
-		BufferIO::Write<uint16_t>(pbuf, 0);
-		BufferIO::Write<uint16_t>(pbuf, 0); });
-
-        uint8_t newturn_count = (turn_player == 1) ? 2 : 1;
-        for (uint8_t i = 0; i < newturn_count; ++i)
-        {
-            WriteMsg([&](uint8_t *&pbuf)
-                     {
-			BufferIO::Write<uint8_t>(pbuf, MSG_NEW_TURN);
-			BufferIO::Write<uint8_t>(pbuf, i); });
-        }
-
-        WriteMsg([&](uint8_t *&pbuf)
-                 {
-		BufferIO::Write<uint8_t>(pbuf, MSG_NEW_PHASE);
-		BufferIO::Write<uint16_t>(pbuf, phase); });
-
-        WriteMsg([&](uint8_t *&pbuf)
-                 {
-		auto length = query_field_info(pduel, player, pbuf);
-		pbuf += length; });
-
-        RefreshMzone(1 - player, 0xefffff, 0, 1 - player, dp);
-        RefreshMzone(player, 0xefffff, 0, player, dp);
-        RefreshSzone(1 - player, 0xefffff, 0, 1 - player, dp);
-        RefreshSzone(player, 0xefffff, 0, player, dp);
-        RefreshHand(1 - player, 0xefffff, 0, 1 - player, dp);
-        RefreshHand(player, 0xefffff, 0, player, dp);
-        RefreshGrave(1 - player, 0xefffff, 0, 1 - player, dp);
-        RefreshGrave(player, 0xefffff, 0, player, dp);
-        RefreshExtra(1 - player, 0xefffff, 0, 1 - player, dp);
-        RefreshExtra(player, 0xefffff, 0, player, dp);
-        RefreshRemoved(1 - player, 0xefffff, 0, 1 - player, dp);
-        RefreshRemoved(player, 0xefffff, 0, player, dp);
-
-        // send MSG_REVERSE_DECK if deck is reversed
-        if (deck_reversed)
-            WriteMsg([&](uint8_t *&pbuf)
-                     { BufferIO::Write<uint8_t>(pbuf, MSG_REVERSE_DECK); });
-
-        uint8_t query_buffer[SIZE_QUERY_BUFFER];
-        for (uint8_t i = 0; i < 2; ++i)
-        {
-            // get decktop card
-            auto qlen = query_field_card(pduel, player, i, LOCATION_DECK, QUERY_CODE | QUERY_POSITION, query_buffer, 0);
-            if (!qlen)
-                continue; // no cards in deck
-            uint8_t *qbuf = query_buffer;
-            uint32_t code = 0;
-            uint32_t position = 0;
-            while (qbuf < query_buffer + qlen)
-            {
-                auto clen = BufferIO::Read<int32_t>(qbuf);
-                if (qbuf + clen - 4 == query_buffer + qlen)
-                {
-                    // last card
-                    code = *(uint32_t *)(qbuf + 4);
-                    position = GetPosition(qbuf, 8);
-                }
-                qbuf += clen - 4;
-            }
-            if (position & POS_FACEUP)
-                code |= 0x80000000; // mark as reversed
-            if (deck_reversed || position & POS_FACEUP)
-                WriteMsg([&](uint8_t *&pbuf)
-                         {
-				BufferIO::Write<uint8_t>(pbuf, MSG_DECK_TOP);
-				BufferIO::Write<uint8_t>(pbuf, i);
-				BufferIO::Write<uint8_t>(pbuf, 0);
-				BufferIO::Write<int32_t>(pbuf, code); });
-        }
-
-        /*
-        if(dp == players[last_response])
-            WaitforResponse(last_response);
-        */
-        STOC_TimeLimit sctl;
-        sctl.player = 1 - last_response;
-        sctl.left_time = time_limit[1 - last_response];
-        NetServer::SendPacketToPlayer(dp, STOC_TIME_LIMIT, sctl);
-        sctl.player = last_response;
-        sctl.left_time = time_limit[last_response] - time_elapsed;
-        NetServer::SendPacketToPlayer(dp, STOC_TIME_LIMIT, sctl);
-
-        NetServer::SendPacketToPlayer(dp, STOC_FIELD_FINISH);
-    }
-#endif // YGOPRO_SERVER_MODE
-    void SingleDuel::TimeConfirm(DuelPlayer *dp)
-    {
-        if (host_info.time_limit == 0)
-            return;
-        if (dp->type != last_response)
-            return;
-        players[last_response]->state = CTOS_RESPONSE;
-#ifdef YGOPRO_SERVER_MODE
-        if (time_elapsed < 10 && time_elapsed <= time_compensator[dp->type])
-        {
-            time_compensator[dp->type] -= time_elapsed;
-            time_elapsed = 0;
-        }
-        else
-        {
-            time_limit[dp->type] -= time_elapsed;
-            time_elapsed = 0;
-        }
-#else
-        if (time_elapsed < 10)
-            time_elapsed = 0;
-#endif // YGOPRO_SERVER_MODE
-    }
-    inline int SingleDuel::WriteUpdateData(int player, int location, unsigned int flag, unsigned char *&qbuf, int use_cache, int field)
-    {
-        flag |= (QUERY_CODE | QUERY_POSITION);
-        BufferIO::Write<uint8_t>(qbuf, MSG_UPDATE_DATA);
-        BufferIO::Write<uint8_t>(qbuf, player);
-        BufferIO::Write<uint8_t>(qbuf, location);
-        int len = query_field_card(pduel, field, player, location, flag, qbuf, use_cache);
-        return len;
-    }
-#ifdef YGOPRO_SERVER_MODE
-    inline bool SingleDuel::IsBattleField() const
-    {
-        return active_field == 4 || active_field == 5;
-    }
-    void SingleDuel::RefreshMzone(int player, int flag, int use_cache, int field, DuelPlayer *dp)
-#else
-    void SingleDuel::RefreshMzone(int player, int flag, int use_cache, int field)
-#endif // YGOPRO_SERVER_MODE
-    {
-        if (field == FIELD_SENTINEL)
-            field = active_field;
-        std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
-        auto qbuf = query_buffer.data();
-        auto len = WriteUpdateData(player, LOCATION_MZONE, flag, qbuf, use_cache, field);
-        std::vector<std::pair<unsigned char *, int>> hidden_segments;
-        int qlen = 0;
-        while (qlen < len)
-        {
-            const int clen = BufferIO::Read<int32_t>(qbuf);
-            qlen += clen;
-            if (clen <= LEN_HEADER)
-                continue;
-            auto position = GetPosition(qbuf, 8);
-            const bool hide_code = NetServer::ShouldHideFacedownCode(position);
-            position = NetServer::StripRevealFlag(qbuf, 8);
-            if (hide_code)
-                hidden_segments.emplace_back(qbuf, clen);
-            qbuf += clen - 4;
-        }
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[player]) && (IsBattleField() || player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayer(replay_recorder);
-#endif
-        for (const auto &segment : hidden_segments)
-            std::memset(segment.first, 0, segment.second - 4);
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[1 - player]) && (IsBattleField() || 1 - player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? 1 - player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-#endif
-            for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                NetServer::ReSendToPlayer(*pit);
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayer(cache_recorder);
-#endif
-    }
-#ifdef YGOPRO_SERVER_MODE
-    void SingleDuel::RefreshSzone(int player, int flag, int use_cache, int field, DuelPlayer *dp)
-#else
-    void SingleDuel::RefreshSzone(int player, int flag, int use_cache, int field)
-#endif // YGOPRO_SERVER_MODE
-    {
-        if (field == FIELD_SENTINEL)
-            field = active_field;
-        std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
-        auto qbuf = query_buffer.data();
-        auto len = WriteUpdateData(player, LOCATION_SZONE, flag, qbuf, use_cache, field);
-        std::vector<std::pair<unsigned char *, int>> hidden_segments;
-        int qlen = 0;
-        while (qlen < len)
-        {
-            const int clen = BufferIO::Read<int32_t>(qbuf);
-            qlen += clen;
-            if (clen <= LEN_HEADER)
-                continue;
-            auto position = GetPosition(qbuf, 8);
-            const bool hide_code = NetServer::ShouldHideFacedownCode(position);
-            position = NetServer::StripRevealFlag(qbuf, 8);
-            if (hide_code)
-                hidden_segments.emplace_back(qbuf, clen);
-            qbuf += clen - 4;
-        }
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[player]) && (IsBattleField() || player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayer(replay_recorder);
-#endif
-        for (const auto &segment : hidden_segments)
-            std::memset(segment.first, 0, segment.second - 4);
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[1 - player]) && (IsBattleField() || 1 - player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? 1 - player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-#endif
-            for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                NetServer::ReSendToPlayer(*pit);
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayer(cache_recorder);
-#endif
-    }
-#ifdef YGOPRO_SERVER_MODE
-    void SingleDuel::RefreshHand(int player, int flag, int use_cache, int field, DuelPlayer *dp)
-#else
-    void SingleDuel::RefreshHand(int player, int flag, int use_cache, int field)
-#endif // YGOPRO_SERVER_MODE
-    {
-        if (field == FIELD_SENTINEL)
-            field = active_field;
-        std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
-        auto qbuf = query_buffer.data();
-        auto len = WriteUpdateData(player, LOCATION_HAND, flag, qbuf, use_cache, field);
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[player]) && (IsBattleField() || player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayer(replay_recorder);
-#endif
-        int qlen = 0;
-        while (qlen < len)
-        {
-            const int slen = BufferIO::Read<int32_t>(qbuf);
-            qlen += slen;
-            if (slen <= LEN_HEADER)
-                continue;
-            auto position = GetPosition(qbuf, 8);
-            if (!(position & POS_FACEUP))
-                std::memset(qbuf, 0, slen - 4);
-            qbuf += slen - 4;
-        }
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[1 - player]) && (IsBattleField() || 1 - player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? 1 - player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-#endif
-            for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                NetServer::ReSendToPlayer(*pit);
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayer(cache_recorder);
-#endif
-    }
-#ifdef YGOPRO_SERVER_MODE
-    void SingleDuel::RefreshGrave(int player, int flag, int use_cache, int field, DuelPlayer *dp)
-#else
-    void SingleDuel::RefreshGrave(int player, int flag, int use_cache, int field)
-#endif // YGOPRO_SERVER_MODE
-    {
-        if (field == FIELD_SENTINEL)
-            field = active_field;
-        std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
-        auto qbuf = query_buffer.data();
-        auto len = WriteUpdateData(player, LOCATION_GRAVE, flag, qbuf, use_cache, field);
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[player]) && (IsBattleField() || player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayer(replay_recorder);
-#endif
-        int qlen = 0;
-        while (qlen < len)
-        {
-            const int clen = BufferIO::Read<int32_t>(qbuf);
-            qlen += clen;
-            if (clen <= LEN_HEADER)
-                continue;
-            auto position = GetPosition(qbuf, 8);
-            if (position & POS_FACEDOWN)
-                memset(qbuf, 0, clen - 4);
-            qbuf += clen - 4;
-        }
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[1 - player]) && (IsBattleField() || 1 - player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? 1 - player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-#endif
-            for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                NetServer::ReSendToPlayer(*pit);
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayers(cache_recorder, replay_recorder);
-#endif
-    }
-#ifdef YGOPRO_SERVER_MODE
-    void SingleDuel::RefreshExtra(int player, int flag, int use_cache, int field, DuelPlayer *dp)
-#else
-    void SingleDuel::RefreshExtra(int player, int flag, int use_cache, int field)
-#endif // YGOPRO_SERVER_MODE
-    {
-        if (field == FIELD_SENTINEL)
-            field = active_field;
-        std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
-        auto qbuf = query_buffer.data();
-        auto len = WriteUpdateData(player, LOCATION_EXTRA, flag, qbuf, use_cache, field);
-#ifdef YGOPRO_SERVER_MODE
-        if ((!dp || dp == players[player]) && (IsBattleField() || player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#else
-        NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
-#endif
-#ifdef YGOPRO_SERVER_MODE
-        if (!dp)
-            NetServer::ReSendToPlayer(replay_recorder);
-        int qlen = 0;
-        while (qlen < len)
-        {
-            int clen = BufferIO::Read<int32_t>(qbuf);
-            qlen += clen;
-            if (clen <= LEN_HEADER)
-                continue;
-            auto position = GetPosition(qbuf, 8);
-            if (position & POS_FACEDOWN)
-                memset(qbuf, 0, clen - 4);
-            qbuf += clen - 4;
-        }
-        if ((!dp || dp == players[1 - player]) && (IsBattleField() || 1 - player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? 1 - player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-        if (!dp)
-            for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                NetServer::ReSendToPlayer(*pit);
-        if (!dp)
-            NetServer::ReSendToPlayer(cache_recorder);
-#endif // YGOPRO_SERVER_MODE
-    }
-#ifdef YGOPRO_SERVER_MODE
-    void SingleDuel::RefreshRemoved(int player, int flag, int use_cache, int field, DuelPlayer *dp)
-    {
-        if (field == FIELD_SENTINEL)
-            field = active_field;
-        std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
-        auto qbuf = query_buffer.data();
-        auto len = WriteUpdateData(player, LOCATION_REMOVED, flag, qbuf, use_cache, field);
-        if ((!dp || dp == players[player]) && (IsBattleField() || player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-        if (!dp)
-            NetServer::ReSendToPlayer(replay_recorder);
-        int qlen = 0;
-        while (qlen < len)
-        {
-            int clen = BufferIO::Read<int32_t>(qbuf);
-            qlen += clen;
-            if (clen <= LEN_HEADER)
-                continue;
-            auto position = GetPosition(qbuf, 8);
-            if (position & POS_FACEDOWN)
-                memset(qbuf, 0, clen - 4);
-            qbuf += clen - 4;
-        }
-        if ((!dp || dp == players[1 - player]) && (IsBattleField() || 1 - player == 0))
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? 1 - player : active_field], STOC_GAME_MSG, query_buffer.data(), len + 3);
-        if (!dp)
-            for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-                NetServer::ReSendToPlayer(*pit);
-        if (!dp)
-            NetServer::ReSendToPlayer(cache_recorder);
-    }
-#endif
-    void SingleDuel::RefreshSingle(int player, int location, int sequence, int flag, int field)
-    {
-#ifdef YGOPRO_SERVER_MODE
-        if (field == FIELD_SENTINEL)
-            field = active_field;
-#else
-        if (field == FIELD_SENTINEL)
-            field = player;
-#endif
-        flag |= (QUERY_CODE | QUERY_POSITION);
-        unsigned char query_buffer[0x1000];
-        auto qbuf = query_buffer;
-        BufferIO::Write<uint8_t>(qbuf, MSG_UPDATE_CARD);
-        BufferIO::Write<uint8_t>(qbuf, player);
-        BufferIO::Write<uint8_t>(qbuf, location);
-        BufferIO::Write<uint8_t>(qbuf, sequence);
-        int len = query_card(pduel, field, player, location, sequence, flag, qbuf, 0);
-        if (len <= LEN_HEADER)
-        {
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? player : active_field], STOC_GAME_MSG, query_buffer, len + 4);
-#ifdef YGOPRO_SERVER_MODE
-            NetServer::ReSendToPlayer(replay_recorder);
-#endif
-            return;
-        }
-        auto position = GetPosition(qbuf, 12);
-        bool hide_code = position & POS_FACEDOWN;
-        if (location & LOCATION_ONFIELD)
-        {
-            hide_code = NetServer::ShouldHideFacedownCode(position);
-            position = NetServer::StripRevealFlag(qbuf, 12);
-        }
-        NetServer::SendBufferToPlayer(players[IsBattleField() ? player : active_field], STOC_GAME_MSG, query_buffer, len + 4);
-#ifdef YGOPRO_SERVER_MODE
-        NetServer::ReSendToPlayer(replay_recorder);
-#endif
-        if (hide_code)
-        {
-            BufferIO::Write<int32_t>(qbuf, 16);
-            BufferIO::Write<uint32_t>(qbuf, QUERY_CODE | QUERY_POSITION);
-            BufferIO::Write<uint32_t>(qbuf, 0);
-            // keep the 4 bytes position data
-            len = 16;
-        }
-#ifdef YGOPRO_SERVER_MODE
-        if (IsBattleField() || 1 - player == 0)
-            NetServer::SendBufferToPlayer(players[IsBattleField() ? 1 - player : active_field], STOC_GAME_MSG, query_buffer, len + 4);
-#else
-        NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer, len + 4);
-#endif
-        for (auto pit = observers.begin(); pit != observers.end(); ++pit)
-            NetServer::ReSendToPlayer(*pit);
-#ifdef YGOPRO_SERVER_MODE
-        NetServer::ReSendToPlayer(cache_recorder);
-#endif
-    }
-    uint32_t SingleDuel::MessageHandler(intptr_t fduel, uint32_t type)
-    {
-        char msgbuf[1024];
-        get_log_message(fduel, msgbuf);
-        mainGame->AddDebugMsg(msgbuf);
-        return 0;
-    }
-    void SingleDuel::SingleTimer(evutil_socket_t fd, short events, void *arg)
-    {
-        SingleDuel *sd = static_cast<SingleDuel *>(arg);
-        sd->time_elapsed++;
-        if (sd->time_elapsed >= sd->time_limit[sd->last_response] || sd->time_limit[sd->last_response] <= 0)
-        {
-            unsigned char wbuf[3];
-            uint32_t player = sd->last_response;
-            wbuf[0] = MSG_WIN;
-            wbuf[1] = 1 - player;
-            wbuf[2] = 0x3;
-            NetServer::SendBufferToPlayer(sd->players[0], STOC_GAME_MSG, wbuf, 3);
-            NetServer::ReSendToPlayer(sd->players[1]);
-            for (auto oit = sd->observers.begin(); oit != sd->observers.end(); ++oit)
-                NetServer::ReSendToPlayer(*oit);
-#ifdef YGOPRO_SERVER_MODE
-            NetServer::ReSendToPlayers(sd->cache_recorder, sd->replay_recorder);
-#endif
-            if (sd->players[player] == sd->pplayer[player])
-            {
-                sd->match_result[sd->duel_count++] = 1 - player;
-                sd->tp_player = player;
-            }
-            else
-            {
-                sd->match_result[sd->duel_count++] = player;
-                sd->tp_player = 1 - player;
-            }
-            sd->EndDuel();
-            sd->DuelEndProc();
-            event_del(sd->etimer);
-            return;
-        }
-        timeval timeout = {1, 0};
-        event_add(sd->etimer, &timeout);
-    }
+SingleDuel::SingleDuel(bool is_match) {
+	match_mode = is_match;
+}
+SingleDuel::~SingleDuel() {
+}
+void SingleDuel::Chat(DuelPlayer* dp, unsigned char* pdata, int len) {
+	unsigned char scc[SIZE_STOC_CHAT];
+	const auto scc_size = NetServer::CreateChatPacket(pdata, len, scc, dp->type);
+	if (!scc_size)
+		return;
+	NetServer::SendBufferToPlayer(players[0], STOC_CHAT, scc, scc_size);
+	NetServer::ReSendToPlayer(players[1]);
+	for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+		NetServer::ReSendToPlayer(*pit);
+}
+void SingleDuel::JoinGame(DuelPlayer* dp, unsigned char* pdata, bool is_creater) {
+	if(!is_creater) {
+		if(dp->game && dp->type != 0xff) {
+			STOC_ErrorMsg scem;
+			scem.msg = ERRMSG_JOINERROR;
+			scem.code = 0;
+			NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
+			NetServer::DisconnectPlayer(dp);
+			return;
+		}
+		CTOS_JoinGame packet;
+		std::memcpy(&packet, pdata, sizeof packet);
+		auto pkt = &packet;
+		if(pkt->version != PRO_VERSION) {
+			STOC_ErrorMsg scem;
+			scem.msg = ERRMSG_VERERROR;
+			scem.code = PRO_VERSION;
+			NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
+			NetServer::DisconnectPlayer(dp);
+			return;
+		}
+		wchar_t jpass[20];
+		BufferIO::NullTerminate(pkt->pass);
+		BufferIO::CopyCharArray(pkt->pass, jpass);
+		if(std::wcscmp(jpass, pass)) {
+			STOC_ErrorMsg scem;
+			scem.msg = ERRMSG_JOINERROR;
+			scem.code = 1;
+			NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
+			return;
+		}
+	}
+	dp->game = this;
+	if(!players[0] && !players[1] && observers.size() == 0)
+		host_player = dp;
+	STOC_JoinGame scjg;
+	scjg.info = host_info;
+	STOC_TypeChange sctc;
+	sctc.type = (host_player == dp) ? 0x10 : 0;
+	if(!players[0] || !players[1]) {
+		STOC_HS_PlayerEnter scpe;
+		BufferIO::CopyCharArray(dp->name, scpe.name);
+		if(!players[0])
+			scpe.pos = 0;
+		else
+			scpe.pos = 1;
+		if(players[0]) {
+			NetServer::SendPacketToPlayer(players[0], STOC_HS_PLAYER_ENTER, scpe);
+		}
+		if(players[1]) {
+			NetServer::SendPacketToPlayer(players[1], STOC_HS_PLAYER_ENTER, scpe);
+		}
+		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+			NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_ENTER, scpe);
+		if(!players[0]) {
+			players[0] = dp;
+			dp->type = NETPLAYER_TYPE_PLAYER1;
+			sctc.type |= NETPLAYER_TYPE_PLAYER1;
+		} else {
+			players[1] = dp;
+			dp->type = NETPLAYER_TYPE_PLAYER2;
+			sctc.type |= NETPLAYER_TYPE_PLAYER2;
+		}
+	} else {
+		observers.insert(dp);
+		dp->type = NETPLAYER_TYPE_OBSERVER;
+		sctc.type |= NETPLAYER_TYPE_OBSERVER;
+		STOC_HS_WatchChange scwc;
+		scwc.watch_count = (unsigned short)observers.size();
+		if(players[0])
+			NetServer::SendPacketToPlayer(players[0], STOC_HS_WATCH_CHANGE, scwc);
+		if(players[1])
+			NetServer::SendPacketToPlayer(players[1], STOC_HS_WATCH_CHANGE, scwc);
+		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+			NetServer::SendPacketToPlayer(*pit, STOC_HS_WATCH_CHANGE, scwc);
+	}
+	NetServer::SendPacketToPlayer(dp, STOC_JOIN_GAME, scjg);
+	NetServer::SendPacketToPlayer(dp, STOC_TYPE_CHANGE, sctc);
+	if(players[0]) {
+		STOC_HS_PlayerEnter scpe;
+		BufferIO::CopyCharArray(players[0]->name, scpe.name);
+		scpe.pos = 0;
+		NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_ENTER, scpe);
+		if(ready[0]) {
+			STOC_HS_PlayerChange scpc;
+			scpc.status = PLAYERCHANGE_READY;
+			NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_CHANGE, scpc);
+		}
+	}
+	if(players[1]) {
+		STOC_HS_PlayerEnter scpe;
+		BufferIO::CopyCharArray(players[1]->name, scpe.name);
+		scpe.pos = 1;
+		NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_ENTER, scpe);
+		if(ready[1]) {
+			STOC_HS_PlayerChange scpc;
+			scpc.status = 0x10 | PLAYERCHANGE_READY;
+			NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_CHANGE, scpc);
+		}
+	}
+	if(observers.size()) {
+		STOC_HS_WatchChange scwc;
+		scwc.watch_count = (unsigned short)observers.size();
+		NetServer::SendPacketToPlayer(dp, STOC_HS_WATCH_CHANGE, scwc);
+	}
+}
+void SingleDuel::LeaveGame(DuelPlayer* dp) {
+	if(dp == host_player) {
+		EndDuel();
+		NetServer::StopServer();
+	} else if(dp->type == NETPLAYER_TYPE_OBSERVER) {
+		observers.erase(dp);
+		if(duel_stage == DUEL_STAGE_BEGIN) {
+			STOC_HS_WatchChange scwc;
+			scwc.watch_count = (unsigned short)observers.size();
+			if(players[0])
+				NetServer::SendPacketToPlayer(players[0], STOC_HS_WATCH_CHANGE, scwc);
+			if(players[1])
+				NetServer::SendPacketToPlayer(players[1], STOC_HS_WATCH_CHANGE, scwc);
+			for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+				NetServer::SendPacketToPlayer(*pit, STOC_HS_WATCH_CHANGE, scwc);
+		}
+		NetServer::DisconnectPlayer(dp);
+	} else {
+		if(duel_stage == DUEL_STAGE_BEGIN) {
+			STOC_HS_PlayerChange scpc;
+			players[dp->type] = 0;
+			ready[dp->type] = false;
+			scpc.status = (dp->type << 4) | PLAYERCHANGE_LEAVE;
+			if(players[0] && dp->type != 0)
+				NetServer::SendPacketToPlayer(players[0], STOC_HS_PLAYER_CHANGE, scpc);
+			if(players[1] && dp->type != 1)
+				NetServer::SendPacketToPlayer(players[1], STOC_HS_PLAYER_CHANGE, scpc);
+			for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+				NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_CHANGE, scpc);
+			NetServer::DisconnectPlayer(dp);
+		} else {
+			if(duel_stage == DUEL_STAGE_SIDING) {
+				if(!ready[0])
+					NetServer::SendPacketToPlayer(players[0], STOC_DUEL_START);
+				if(!ready[1])
+					NetServer::SendPacketToPlayer(players[1], STOC_DUEL_START);
+			}
+			if(duel_stage != DUEL_STAGE_END) {
+				unsigned char wbuf[3];
+				wbuf[0] = MSG_WIN;
+				wbuf[1] = 1 - dp->type;
+				wbuf[2] = 0x4;
+				NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, wbuf, 3);
+				NetServer::ReSendToPlayer(players[1]);
+				for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+					NetServer::ReSendToPlayer(*oit);
+				EndDuel();
+				NetServer::SendPacketToPlayer(players[0], STOC_DUEL_END);
+				NetServer::ReSendToPlayer(players[1]);
+				for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+					NetServer::ReSendToPlayer(*oit);
+			}
+			NetServer::DisconnectPlayer(dp);
+		}
+	}
+}
+void SingleDuel::ToDuelist(DuelPlayer* dp) {
+	if(dp->type != NETPLAYER_TYPE_OBSERVER)
+		return;
+	if(players[0] && players[1])
+		return;
+	observers.erase(dp);
+	STOC_HS_PlayerEnter scpe;
+	BufferIO::CopyCharArray(dp->name, scpe.name);
+	if(!players[0]) {
+		players[0] = dp;
+		dp->type = NETPLAYER_TYPE_PLAYER1;
+		scpe.pos = 0;
+	} else {
+		players[1] = dp;
+		dp->type = NETPLAYER_TYPE_PLAYER2;
+		scpe.pos = 1;
+	}
+	STOC_HS_WatchChange scwc;
+	scwc.watch_count = (unsigned short)observers.size();
+	NetServer::SendPacketToPlayer(players[0], STOC_HS_PLAYER_ENTER, scpe);
+	NetServer::SendPacketToPlayer(players[0], STOC_HS_WATCH_CHANGE, scwc);
+	if(players[1]) {
+		NetServer::SendPacketToPlayer(players[1], STOC_HS_PLAYER_ENTER, scpe);
+		NetServer::SendPacketToPlayer(players[1], STOC_HS_WATCH_CHANGE, scwc);
+	}
+	for(auto pit = observers.begin(); pit != observers.end(); ++pit) {
+		NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_ENTER, scpe);
+		NetServer::SendPacketToPlayer(*pit, STOC_HS_WATCH_CHANGE, scwc);
+	}
+	STOC_TypeChange sctc;
+	sctc.type = (dp == host_player ? 0x10 : 0) | dp->type;
+	NetServer::SendPacketToPlayer(dp, STOC_TYPE_CHANGE, sctc);
+}
+void SingleDuel::ToObserver(DuelPlayer* dp) {
+	if(dp->type > 1)
+		return;
+	STOC_HS_PlayerChange scpc;
+	scpc.status = (dp->type << 4) | PLAYERCHANGE_OBSERVE;
+	if(players[0])
+		NetServer::SendPacketToPlayer(players[0], STOC_HS_PLAYER_CHANGE, scpc);
+	if(players[1])
+		NetServer::SendPacketToPlayer(players[1], STOC_HS_PLAYER_CHANGE, scpc);
+	for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+		NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_CHANGE, scpc);
+	players[dp->type] = 0;
+	ready[dp->type] = false;
+	dp->type = NETPLAYER_TYPE_OBSERVER;
+	observers.insert(dp);
+	STOC_TypeChange sctc;
+	sctc.type = (dp == host_player ? 0x10 : 0) | dp->type;
+	NetServer::SendPacketToPlayer(dp, STOC_TYPE_CHANGE, sctc);
+}
+void SingleDuel::PlayerReady(DuelPlayer* dp, bool is_ready) {
+	if(dp->type > 1)
+		return;
+	if(ready[dp->type] == is_ready)
+		return;
+	if(is_ready) {
+		uint32_t deckerror = 0;
+		if(!host_info.no_check_deck) {
+			if(deck_error[dp->type]) {
+				deckerror = (DECKERROR_UNKNOWNCARD << 28) | deck_error[dp->type];
+			} else {
+				deckerror = deckManager.CheckDeck(pdeck[dp->type], host_info.lflist, host_info.rule);
+			}
+		}
+		if(deckerror) {
+			STOC_HS_PlayerChange scpc;
+			scpc.status = (dp->type << 4) | PLAYERCHANGE_NOTREADY;
+			NetServer::SendPacketToPlayer(dp, STOC_HS_PLAYER_CHANGE, scpc);
+			STOC_ErrorMsg scem;
+			scem.msg = ERRMSG_DECKERROR;
+			scem.code = deckerror;
+			NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
+			return;
+		}
+	}
+	ready[dp->type] = is_ready;
+	STOC_HS_PlayerChange scpc;
+	scpc.status = (dp->type << 4) | (is_ready ? PLAYERCHANGE_READY : PLAYERCHANGE_NOTREADY);
+	NetServer::SendPacketToPlayer(players[dp->type], STOC_HS_PLAYER_CHANGE, scpc);
+	if(players[1 - dp->type])
+		NetServer::SendPacketToPlayer(players[1 - dp->type], STOC_HS_PLAYER_CHANGE, scpc);
+	for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+		NetServer::SendPacketToPlayer(*pit, STOC_HS_PLAYER_CHANGE, scpc);
+}
+void SingleDuel::PlayerKick(DuelPlayer* dp, unsigned char pos) {
+	if(pos > 1 || dp != host_player || dp == players[pos] || !players[pos])
+		return;
+	LeaveGame(players[pos]);
+}
+void SingleDuel::UpdateDeck(DuelPlayer* dp, unsigned char* pdata, unsigned int len) {
+	if(dp->type > 1 || ready[dp->type])
+		return;
+	if (len < sizeof(uint32_t) * 2)
+		return;
+	bool valid = true;
+	uint32_t mainc = BufferIO::Read<uint32_t>(pdata);
+	uint32_t sidec = BufferIO::Read<uint32_t>(pdata);
+	if (mainc > MAINC_MAX)
+		valid = false;
+	else if (sidec > SIDEC_MAX)
+		valid = false;
+	else if (len < (2 + mainc + sidec) * sizeof(uint32_t))
+		valid = false;
+	if (!valid) {
+		STOC_ErrorMsg scem;
+		scem.msg = ERRMSG_DECKERROR;
+		scem.code = 0;
+		NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
+		return;
+	}
+	uint32_t deckbuf[MAINC_MAX + SIDEC_MAX];
+	std::memcpy(deckbuf, pdata, (mainc + sidec) * sizeof(uint32_t));
+	if(duel_count == 0) {
+		deck_error[dp->type] = DeckManager::LoadDeck(pdeck[dp->type], deckbuf, mainc, sidec);
+	} else {
+		if(DeckManager::LoadSide(pdeck[dp->type], deckbuf, mainc, sidec)) {
+			ready[dp->type] = true;
+			NetServer::SendPacketToPlayer(dp, STOC_DUEL_START);
+			if(ready[0] && ready[1]) {
+				NetServer::SendPacketToPlayer(players[tp_player], STOC_SELECT_TP);
+				players[1 - tp_player]->state = 0xff;
+				players[tp_player]->state = CTOS_TP_RESULT;
+				duel_stage = DUEL_STAGE_FIRSTGO;
+			}
+		} else {
+			STOC_ErrorMsg scem;
+			scem.msg = ERRMSG_SIDEERROR;
+			scem.code = 0;
+			NetServer::SendPacketToPlayer(dp, STOC_ERROR_MSG, scem);
+		}
+	}
+}
+void SingleDuel::StartDuel(DuelPlayer* dp) {
+	if(dp != host_player)
+		return;
+	if(!ready[0] || !ready[1])
+		return;
+	NetServer::StopListen();
+	//NetServer::StopBroadcast();
+	NetServer::SendPacketToPlayer(players[0], STOC_DUEL_START);
+	NetServer::ReSendToPlayer(players[1]);
+	for(auto oit = observers.begin(); oit != observers.end(); ++oit) {
+		(*oit)->state = CTOS_LEAVE_GAME;
+		NetServer::ReSendToPlayer(*oit);
+	}
+	unsigned char deckbuff[12];
+	auto pbuf = deckbuff;
+	BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[0].main.size());
+	BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[0].extra.size());
+	BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[0].side.size());
+	BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[1].main.size());
+	BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[1].extra.size());
+	BufferIO::Write<uint16_t>(pbuf, (uint16_t)pdeck[1].side.size());
+	NetServer::SendBufferToPlayer(players[0], STOC_DECK_COUNT, deckbuff, 12);
+	char tempbuff[6];
+	std::memcpy(tempbuff, deckbuff, 6);
+	std::memcpy(deckbuff, deckbuff + 6, 6);
+	std::memcpy(deckbuff + 6, tempbuff, 6);
+	NetServer::SendBufferToPlayer(players[1], STOC_DECK_COUNT, deckbuff, 12);
+	NetServer::SendPacketToPlayer(players[0], STOC_SELECT_HAND);
+	NetServer::ReSendToPlayer(players[1]);
+	hand_result[0] = 0;
+	hand_result[1] = 0;
+	players[0]->state = CTOS_HAND_RESULT;
+	players[1]->state = CTOS_HAND_RESULT;
+	duel_stage = DUEL_STAGE_FINGER;
+}
+void SingleDuel::HandResult(DuelPlayer* dp, unsigned char res) {
+	if(res == 0 || res > 3 || dp->state != CTOS_HAND_RESULT)
+		return;
+	auto player = dp->type;
+	if(hand_result[player])
+		return;
+	hand_result[player] = res;
+	if(hand_result[0] && hand_result[1]) {
+		STOC_HandResult schr;
+		schr.res1 = hand_result[0];
+		schr.res2 = hand_result[1];
+		NetServer::SendPacketToPlayer(players[0], STOC_HAND_RESULT, schr);
+		for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+			NetServer::ReSendToPlayer(*oit);
+		schr.res1 = hand_result[1];
+		schr.res2 = hand_result[0];
+		NetServer::SendPacketToPlayer(players[1], STOC_HAND_RESULT, schr);
+		if(hand_result[0] == hand_result[1]) {
+			NetServer::SendPacketToPlayer(players[0], STOC_SELECT_HAND);
+			NetServer::ReSendToPlayer(players[1]);
+			hand_result[0] = 0;
+			hand_result[1] = 0;
+			players[0]->state = CTOS_HAND_RESULT;
+			players[1]->state = CTOS_HAND_RESULT;
+		} else if((hand_result[0] == 1 && hand_result[1] == 2)
+		          || (hand_result[0] == 2 && hand_result[1] == 3)
+		          || (hand_result[0] == 3 && hand_result[1] == 1)) {
+			NetServer::SendPacketToPlayer(players[1], STOC_SELECT_TP);
+			tp_player = 1;
+			players[0]->state = 0xff;
+			players[1]->state = CTOS_TP_RESULT;
+			duel_stage = DUEL_STAGE_FIRSTGO;
+		} else {
+			NetServer::SendPacketToPlayer(players[0], STOC_SELECT_TP);
+			players[1]->state = 0xff;
+			players[0]->state = CTOS_TP_RESULT;
+			tp_player = 0;
+			duel_stage = DUEL_STAGE_FIRSTGO;
+		}
+	}
+}
+void SingleDuel::TPResult(DuelPlayer* dp, unsigned char tp) {
+	if(dp->state != CTOS_TP_RESULT)
+		return;
+	duel_stage = DUEL_STAGE_DUELING;
+	bool swapped = false;
+	pplayer[0] = players[0];
+	pplayer[1] = players[1];
+	if((tp && dp->type == 1) || (!tp && dp->type == 0)) {
+		std::swap(players[0], players[1]);
+		players[0]->type = 0;
+		players[1]->type = 1;
+		std::swap(pdeck[0], pdeck[1]);
+		swapped = true;
+	}
+	dp->state = CTOS_RESPONSE;
+	std::random_device rd;
+	ExtendedReplayHeader rh;
+	rh.base.id = REPLAY_ID_YRP2;
+	rh.base.version = PRO_VERSION;
+	rh.base.flag = REPLAY_UNIFORM;
+	rh.base.start_time = (uint32_t)std::time(nullptr);
+	for (auto& x : rh.seed_sequence)
+		x = rd();
+	mtrandom rnd(rh.seed_sequence, SEED_COUNT);
+	last_replay.BeginRecord();
+	last_replay.WriteHeader(rh);
+	last_replay.WriteData(players[0]->name, 40, false);
+	last_replay.WriteData(players[1]->name, 40, false);
+	if(!host_info.no_shuffle_deck) {
+		rnd.shuffle_vector(pdeck[0].main);
+		rnd.shuffle_vector(pdeck[1].main);
+	}
+	time_limit[0] = host_info.time_limit;
+	time_limit[1] = host_info.time_limit;
+	set_script_reader(DataManager::ScriptReaderEx);
+	set_card_reader(DataManager::CardReader);
+	set_message_handler(SingleDuel::MessageHandler);
+	pduel = create_duel_v2(rh.seed_sequence);
+	set_player_info(pduel, 0, host_info.start_lp, host_info.start_hand, host_info.draw_count);
+	set_player_info(pduel, 1, host_info.start_lp, host_info.start_hand, host_info.draw_count);
+	unsigned int opt = (unsigned int)host_info.duel_rule << 16;
+	if(host_info.no_shuffle_deck)
+		opt |= DUEL_PSEUDO_SHUFFLE;
+	last_replay.WriteInt32(host_info.start_lp, false);
+	last_replay.WriteInt32(host_info.start_hand, false);
+	last_replay.WriteInt32(host_info.draw_count, false);
+	last_replay.WriteInt32(opt, false);
+	last_replay.Flush();
+	auto load = [&](const std::vector<const CardDataC*>& deck_container, uint8_t p, uint8_t location) {
+		last_replay.WriteInt32(deck_container.size(), false);
+		for (auto cit = deck_container.rbegin(); cit != deck_container.rend(); ++cit) {
+			new_card(pduel, (*cit)->code, p, p, location, 0, POS_FACEDOWN_DEFENSE);
+			last_replay.WriteInt32((*cit)->code, false);
+		}
+	};
+	load(pdeck[0].main, 0, LOCATION_DECK);
+	load(pdeck[0].extra, 0, LOCATION_EXTRA);
+	load(pdeck[1].main, 1, LOCATION_DECK);
+	load(pdeck[1].extra, 1, LOCATION_EXTRA);
+	last_replay.Flush();
+	unsigned char startbuf[32]{};
+	auto pbuf = startbuf;
+	BufferIO::Write<uint8_t>(pbuf, MSG_START);
+	BufferIO::Write<uint8_t>(pbuf, 0);
+	BufferIO::Write<uint8_t>(pbuf, host_info.duel_rule);
+	BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
+	BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
+	BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 0, LOCATION_DECK));
+	BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 0, LOCATION_EXTRA));
+	BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 1, LOCATION_DECK));
+	BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 1, LOCATION_EXTRA));
+	NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, startbuf, 19);
+	startbuf[1] = 1;
+	NetServer::SendBufferToPlayer(players[1], STOC_GAME_MSG, startbuf, 19);
+	if(!swapped)
+		startbuf[1] = 0x10;
+	else
+		startbuf[1] = 0x11;
+	for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+		NetServer::SendBufferToPlayer(*oit, STOC_GAME_MSG, startbuf, 19);
+	RefreshExtra(0);
+	RefreshExtra(1);
+	start_duel(pduel, opt);
+	if(host_info.time_limit) {
+		time_elapsed = 0;
+		timeval timeout = { 1, 0 };
+		event_add(etimer, &timeout);
+	}
+	Process();
+}
+void SingleDuel::Process() {
+	std::vector<unsigned char> engineBuffer;
+	engineBuffer.reserve(SIZE_MESSAGE_BUFFER);
+	unsigned int engFlag = 0;
+	int engLen = 0;
+	int stop = 0;
+	while (!stop) {
+		if (engFlag == PROCESSOR_END)
+			break;
+		unsigned int result = process(pduel);
+		engLen = result & PROCESSOR_BUFFER_LEN;
+		engFlag = result & PROCESSOR_FLAG;
+		if (engLen > 0) {
+			if (engLen > (int)engineBuffer.size())
+				engineBuffer.resize(engLen);
+			get_message(pduel, engineBuffer.data());
+			stop = Analyze(engineBuffer.data(), engLen);
+		}
+	}
+	if(stop == 2)
+		DuelEndProc();
+}
+void SingleDuel::DuelEndProc() {
+	if(!match_mode) {
+		NetServer::SendPacketToPlayer(players[0], STOC_DUEL_END);
+		NetServer::ReSendToPlayer(players[1]);
+		for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+			NetServer::ReSendToPlayer(*oit);
+		duel_stage = DUEL_STAGE_END;
+	} else {
+		int winc[3] = {0, 0, 0};
+		for(int i = 0; i < duel_count; ++i)
+			winc[match_result[i]]++;
+		if(match_kill
+		        || (winc[0] == 2 || (winc[0] == 1 && winc[2] == 2))
+		        || (winc[1] == 2 || (winc[1] == 1 && winc[2] == 2))
+		        || (winc[2] == 3 || (winc[0] == 1 && winc[1] == 1 && winc[2] == 1)) ) {
+			NetServer::SendPacketToPlayer(players[0], STOC_DUEL_END);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			duel_stage = DUEL_STAGE_END;
+		} else {
+			if(players[0] != pplayer[0]) {
+				players[0] = pplayer[0];
+				players[1] = pplayer[1];
+				players[0]->type = 0;
+				players[1]->type = 1;
+				Deck d = pdeck[0];
+				pdeck[0] = pdeck[1];
+				pdeck[1] = d;
+			}
+			ready[0] = false;
+			ready[1] = false;
+			players[0]->state = CTOS_UPDATE_DECK;
+			players[1]->state = CTOS_UPDATE_DECK;
+			NetServer::SendPacketToPlayer(players[0], STOC_CHANGE_SIDE);
+			NetServer::SendPacketToPlayer(players[1], STOC_CHANGE_SIDE);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::SendPacketToPlayer(*oit, STOC_WAITING_SIDE);
+			duel_stage = DUEL_STAGE_SIDING;
+		}
+	}
+}
+void SingleDuel::Surrender(DuelPlayer* dp) {
+	if(dp->type > 1 || !pduel)
+		return;
+	unsigned char wbuf[3];
+	uint32_t player = dp->type;
+	wbuf[0] = MSG_WIN;
+	wbuf[1] = 1 - player;
+	wbuf[2] = 0;
+	NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, wbuf, 3);
+	NetServer::ReSendToPlayer(players[1]);
+	for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+		NetServer::ReSendToPlayer(*oit);
+	if(players[player] == pplayer[player]) {
+		match_result[duel_count++] = 1 - player;
+		tp_player = player;
+	} else {
+		match_result[duel_count++] = player;
+		tp_player = 1 - player;
+	}
+	EndDuel();
+	DuelEndProc();
+	event_del(etimer);
+}
+// Analyze ocgcore message
+int SingleDuel::Analyze(unsigned char* msgbuffer, unsigned int len) {
+	unsigned char* offset, *pbufw, *pbuf = msgbuffer;
+	int player, count, type;
+	while (pbuf - msgbuffer < (int)len) {
+		offset = pbuf;
+		unsigned char engType = BufferIO::Read<uint8_t>(pbuf);
+		switch (engType) {
+		case MSG_RETRY: {
+			if(last_replay_response_size) {
+				last_replay.RemoveData(last_replay_response_size);
+				last_replay_response_size = 0;
+			}
+			WaitforResponse(last_response);
+			NetServer::SendBufferToPlayer(players[last_response], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_HINT: {
+			type = BufferIO::Read<uint8_t>(pbuf);
+			player = BufferIO::Read<uint8_t>(pbuf);
+			BufferIO::Read<int32_t>(pbuf);
+			switch (type) {
+			case 1:
+			case 2:
+			case 3:
+			case 5: {
+				NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+				break;
+			}
+			case 4:
+			case 6:
+			case 7:
+			case 8:
+			case 9:
+			case 11: {
+				NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
+				for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+					NetServer::ReSendToPlayer(*oit);
+				break;
+			}
+			case 10: {
+				NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+				NetServer::SendBufferToPlayer(players[1], STOC_GAME_MSG, offset, pbuf - offset);
+				for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+					NetServer::ReSendToPlayer(*oit);
+				break;
+			}
+			}
+			break;
+		}
+		case MSG_WIN: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			type = BufferIO::Read<uint8_t>(pbuf);
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			if(player > 1) {
+				match_result[duel_count++] = 2;
+				tp_player = 1 - tp_player;
+			} else if(players[player] == pplayer[player]) {
+				match_result[duel_count++] = player;
+				tp_player = 1 - player;
+			} else {
+				match_result[duel_count++] = 1 - player;
+				tp_player = player;
+			}
+			EndDuel();
+			return 2;
+		}
+		case MSG_SELECT_BATTLECMD: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 11;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 8 + 2;
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			RefreshHand(0);
+			RefreshHand(1);
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_IDLECMD: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 7;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 7;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 7;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 7;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 7;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 11 + 3;
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			RefreshHand(0);
+			RefreshHand(1);
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_EFFECTYN: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 12;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_YESNO: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 4;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_OPTION: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 4;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_CARD:
+		case MSG_SELECT_TRIBUTE: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 3;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			int c/*, l, s, ss, code*/;
+			for (int i = 0; i < count; ++i) {
+				pbufw = pbuf;
+				/*code = */BufferIO::Read<int32_t>(pbuf);
+				c = BufferIO::Read<uint8_t>(pbuf);
+				/*l = */BufferIO::Read<uint8_t>(pbuf);
+				/*s = */BufferIO::Read<uint8_t>(pbuf);
+				/*ss = */BufferIO::Read<uint8_t>(pbuf);
+				if (c != player) BufferIO::Write<int32_t>(pbufw, 0);
+			}
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_UNSELECT_CARD: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 4;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			int c/*, l, s, ss, code*/;
+			for (int i = 0; i < count; ++i) {
+				pbufw = pbuf;
+				/*code = */BufferIO::Read<int32_t>(pbuf);
+				c = BufferIO::Read<uint8_t>(pbuf);
+				/*l = */BufferIO::Read<uint8_t>(pbuf);
+				/*s = */BufferIO::Read<uint8_t>(pbuf);
+				/*ss = */BufferIO::Read<uint8_t>(pbuf);
+				if (c != player) BufferIO::Write<int32_t>(pbufw, 0);
+			}
+			count = BufferIO::Read<uint8_t>(pbuf);
+			for (int i = 0; i < count; ++i) {
+				pbufw = pbuf;
+				/*code = */BufferIO::Read<int32_t>(pbuf);
+				c = BufferIO::Read<uint8_t>(pbuf);
+				/*l = */BufferIO::Read<uint8_t>(pbuf);
+				/*s = */BufferIO::Read<uint8_t>(pbuf);
+				/*ss = */BufferIO::Read<uint8_t>(pbuf);
+				if (c != player) BufferIO::Write<int32_t>(pbufw, 0);
+			}
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_CHAIN: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 9 + count * 14;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_PLACE:
+		case MSG_SELECT_DISFIELD: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 5;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_POSITION: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 5;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_COUNTER: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 4;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 9;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SELECT_SUM: {
+			pbuf++;
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 6;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 11;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 11;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_SORT_CARD: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 7;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_CONFIRM_DECKTOP: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 7;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_CONFIRM_EXTRATOP: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 7;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for (auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_CONFIRM_CARDS: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 1;
+			count = BufferIO::Read<uint8_t>(pbuf);
+			if(pbuf[5] != LOCATION_DECK) {
+				pbuf += count * 7;
+				NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+				NetServer::ReSendToPlayer(players[1 - player]);
+				for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+					NetServer::ReSendToPlayer(*oit);
+			} else {
+				pbuf += count * 7;
+				NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			}
+			break;
+		}
+		case MSG_SHUFFLE_DECK: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_SHUFFLE_HAND: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, (pbuf - offset) + count * 4);
+			for(int i = 0; i < count; ++i)
+				BufferIO::Write<int32_t>(pbuf, 0);
+			NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshHand(player, 0x781fff, 0);
+			break;
+		}
+		case MSG_SHUFFLE_EXTRA: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, (pbuf - offset) + count * 4);
+			for (int i = 0; i < count; ++i)
+				BufferIO::Write<int32_t>(pbuf, 0);
+			NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
+			for (auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshExtra(player);
+			break;
+		}
+		case MSG_REFRESH_DECK: {
+			pbuf++;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_SWAP_GRAVE_DECK: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshGrave(player);
+			break;
+		}
+		case MSG_REVERSE_DECK: {
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_DECK_TOP: {
+			pbuf += 6;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_SHUFFLE_SET_CARD: {
+			unsigned int loc = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 8;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			if(loc == LOCATION_MZONE) {
+				RefreshMzone(0, 0x181fff, 0);
+				RefreshMzone(1, 0x181fff, 0);
+			}
+			else {
+				RefreshSzone(0, 0x181fff, 0);
+				RefreshSzone(1, 0x181fff, 0);
+			}
+			break;
+		}
+		case MSG_NEW_TURN: {
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			RefreshHand(0);
+			RefreshHand(1);
+			pbuf++;
+			time_limit[0] = host_info.time_limit;
+			time_limit[1] = host_info.time_limit;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_NEW_PHASE: {
+			pbuf += 2;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			RefreshHand(0);
+			RefreshHand(1);
+			break;
+		}
+		case MSG_MOVE: {
+			pbufw = pbuf;
+			int pc = pbuf[4];
+			int pl = pbuf[5];
+			/*int ps = pbuf[6];*/
+			/*int pp = pbuf[7];*/
+			int cc = pbuf[8];
+			int cl = pbuf[9];
+			int cs = pbuf[10];
+			uint8_t cp = pbuf[11];
+			const bool hide_code = NetServer::ShouldHideFacedownCode(cp);
+			if (cl & LOCATION_ONFIELD)
+				cp = NetServer::StripRevealFlag(pbufw, 8);
+			pbuf += 16;
+			NetServer::SendBufferToPlayer(players[cc], STOC_GAME_MSG, offset, pbuf - offset);
+			if (!(cl & (LOCATION_GRAVE | LOCATION_OVERLAY))
+					&& ((cl & (LOCATION_DECK | LOCATION_HAND)) || hide_code))
+				BufferIO::Write<int32_t>(pbufw, 0);
+			NetServer::SendBufferToPlayer(players[1 - cc], STOC_GAME_MSG, offset, pbuf - offset);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			if (cl != 0 && (cl & LOCATION_OVERLAY) == 0 && (cl != pl || pc != cc))
+				RefreshSingle(cc, cl, cs);
+			break;
+		}
+		case MSG_POS_CHANGE: {
+			int cc = pbuf[4];
+			int cl = pbuf[5];
+			int cs = pbuf[6];
+			int pp = pbuf[7];
+			int cp = pbuf[8];
+			pbuf += 9;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			if((pp & POS_FACEDOWN) && (cp & POS_FACEUP))
+				RefreshSingle(cc, cl, cs);
+			break;
+		}
+		case MSG_SET: {
+			BufferIO::Write<int32_t>(pbuf, 0);
+			pbuf += 4;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_SWAP: {
+			int c1 = pbuf[4];
+			int l1 = pbuf[5];
+			int s1 = pbuf[6];
+			int c2 = pbuf[12];
+			int l2 = pbuf[13];
+			int s2 = pbuf[14];
+			pbuf += 16;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshSingle(c1, l1, s1);
+			RefreshSingle(c2, l2, s2);
+			break;
+		}
+		case MSG_FIELD_DISABLED: {
+			pbuf += 4;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_SUMMONING: {
+			pbuf += 8;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_SUMMONED: {
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			break;
+		}
+		case MSG_SPSUMMONING: {
+			pbufw = pbuf;
+			int cc = pbuf[4];
+			/*int cl = pbuf[5];*/
+			/*int cs = pbuf[6];*/
+			uint8_t cp = pbuf[7];
+			const bool hide_code = NetServer::ShouldHideFacedownCode(cp);
+			cp = NetServer::StripRevealFlag(pbufw, 4);
+			pbuf += 8;
+			NetServer::SendBufferToPlayer(players[cc], STOC_GAME_MSG, offset, pbuf - offset);
+			if (hide_code)
+				BufferIO::Write<int32_t>(pbufw, 0);
+			NetServer::SendBufferToPlayer(players[1 - cc], STOC_GAME_MSG, offset, pbuf - offset);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_SPSUMMONED: {
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			break;
+		}
+		case MSG_FLIPSUMMONING: {
+			RefreshSingle(pbuf[4], pbuf[5], pbuf[6]);
+			pbuf += 8;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_FLIPSUMMONED: {
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			break;
+		}
+		case MSG_CHAINING: {
+			pbuf += 16;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_CHAINED: {
+			pbuf++;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			RefreshHand(0);
+			RefreshHand(1);
+			break;
+		}
+		case MSG_CHAIN_SOLVING: {
+			pbuf++;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_CHAIN_SOLVED: {
+			pbuf++;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			RefreshHand(0);
+			RefreshHand(1);
+			break;
+		}
+		case MSG_CHAIN_END: {
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			RefreshSzone(0);
+			RefreshSzone(1);
+			RefreshHand(0);
+			RefreshHand(1);
+			break;
+		}
+		case MSG_CHAIN_NEGATED: {
+			pbuf++;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_CHAIN_DISABLED: {
+			pbuf++;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_CARD_SELECTED: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 4;
+			break;
+		}
+		case MSG_RANDOM_SELECTED: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 4;
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_BECOME_TARGET: {
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count * 4;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_DRAW: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbufw = pbuf;
+			pbuf += count * 4;
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			for (int i = 0; i < count; ++i) {
+				if(!(pbufw[3] & 0x80))
+					BufferIO::Write<int32_t>(pbufw, 0);
+				else
+					pbufw += 4;
+			}
+			NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, offset, pbuf - offset);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_DAMAGE: {
+			pbuf += 5;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_RECOVER: {
+			pbuf += 5;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_EQUIP: {
+			pbuf += 8;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_LPUPDATE: {
+			pbuf += 5;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_UNEQUIP: {
+			pbuf += 4;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_CARD_TARGET: {
+			pbuf += 8;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_CANCEL_TARGET: {
+			pbuf += 8;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_PAY_LPCOST: {
+			pbuf += 5;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_ADD_COUNTER: {
+			pbuf += 7;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_REMOVE_COUNTER: {
+			pbuf += 7;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_ATTACK: {
+			pbuf += 8;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_BATTLE: {
+			pbuf += 26;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_ATTACK_DISABLED: {
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_DAMAGE_STEP_START: {
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			break;
+		}
+		case MSG_DAMAGE_STEP_END: {
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			RefreshMzone(0);
+			RefreshMzone(1);
+			break;
+		}
+		case MSG_MISSED_EFFECT: {
+			player = pbuf[0];
+			pbuf += 8;
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			break;
+		}
+		case MSG_TOSS_COIN: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_TOSS_DICE: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += count;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_ROCK_PAPER_SCISSORS: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_HAND_RES: {
+			pbuf += 1;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for (auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_ANNOUNCE_RACE: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 5;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_ANNOUNCE_ATTRIB: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 5;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_ANNOUNCE_CARD:
+		case MSG_ANNOUNCE_NUMBER: {
+			player = BufferIO::Read<uint8_t>(pbuf);
+			count = BufferIO::Read<uint8_t>(pbuf);
+			pbuf += 4 * count;
+			WaitforResponse(player);
+			NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, offset, pbuf - offset);
+			return 1;
+		}
+		case MSG_CARD_HINT: {
+			pbuf += 9;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_PLAYER_HINT: {
+			pbuf += 6;
+			NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+			NetServer::ReSendToPlayer(players[1]);
+			for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+				NetServer::ReSendToPlayer(*oit);
+			break;
+		}
+		case MSG_MATCH_KILL: {
+			int code = BufferIO::Read<int32_t>(pbuf);
+			if(match_mode) {
+				match_kill = code;
+				NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, offset, pbuf - offset);
+				NetServer::ReSendToPlayer(players[1]);
+				for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+					NetServer::ReSendToPlayer(*oit);
+			}
+			break;
+		}
+		}
+	}
+	return 0;
+}
+void SingleDuel::GetResponse(DuelPlayer* dp, unsigned char* pdata, unsigned int len) {
+	unsigned char resb[SIZE_RETURN_VALUE]{};
+	if (len > UINT8_MAX)
+		len = UINT8_MAX;
+	std::memcpy(resb, pdata, len);
+	last_replay_response_size = last_replay.WriteResponse(resb, len);
+	set_responseb(pduel, resb);
+	players[dp->type]->state = 0xff;
+	if(host_info.time_limit) {
+		if(time_limit[dp->type] >= time_elapsed)
+			time_limit[dp->type] -= time_elapsed;
+		else time_limit[dp->type] = 0;
+		time_elapsed = 0;
+	}
+	Process();
+	last_replay_response_size = 0;
+}
+void SingleDuel::EndDuel() {
+	if(!pduel)
+		return;
+	last_replay.EndRecord();
+	std::vector<unsigned char> replay_buffer;
+	replay_buffer.reserve(sizeof last_replay.pheader + last_replay.comp_size);
+	BufferIO::VectorWrite(replay_buffer, last_replay.pheader);
+	BufferIO::VectorWriteBlock(replay_buffer, last_replay.comp_data, last_replay.comp_size);
+	NetServer::SendBufferToPlayer(players[0], STOC_REPLAY, replay_buffer.data(), replay_buffer.size());
+	NetServer::ReSendToPlayer(players[1]);
+	for(auto oit = observers.begin(); oit != observers.end(); ++oit)
+		NetServer::ReSendToPlayer(*oit);
+	end_duel(pduel);
+	event_del(etimer);
+	pduel = 0;
+}
+void SingleDuel::WaitforResponse(int playerid) {
+	last_response = playerid;
+	unsigned char msg = MSG_WAITING;
+	NetServer::SendPacketToPlayer(players[1 - playerid], STOC_GAME_MSG, msg);
+	if(host_info.time_limit) {
+		STOC_TimeLimit sctl;
+		sctl.player = playerid;
+		sctl.left_time = time_limit[playerid];
+		NetServer::SendPacketToPlayer(players[0], STOC_TIME_LIMIT, sctl);
+		NetServer::SendPacketToPlayer(players[1], STOC_TIME_LIMIT, sctl);
+		players[playerid]->state = CTOS_TIME_CONFIRM;
+	} else
+		players[playerid]->state = CTOS_RESPONSE;
+}
+void SingleDuel::TimeConfirm(DuelPlayer* dp) {
+	if(host_info.time_limit == 0)
+		return;
+	if(dp->type != last_response)
+		return;
+	players[last_response]->state = CTOS_RESPONSE;
+	if(time_elapsed < 10)
+		time_elapsed = 0;
+}
+inline int SingleDuel::WriteUpdateData(int player, int location, unsigned int flag, unsigned char*& qbuf, int use_cache) {
+	flag |= (QUERY_CODE | QUERY_POSITION);
+	BufferIO::Write<uint8_t>(qbuf, MSG_UPDATE_DATA);
+	BufferIO::Write<uint8_t>(qbuf, player);
+	BufferIO::Write<uint8_t>(qbuf, location);
+	int len = query_field_card(pduel, player, location, flag, qbuf, use_cache);
+	return len;
+}
+void SingleDuel::RefreshMzone(int player, int flag, int use_cache) {
+	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
+	auto qbuf = query_buffer.data();
+	auto len = WriteUpdateData(player, LOCATION_MZONE, flag, qbuf, use_cache);
+	std::vector<std::pair<unsigned char*, int>> hidden_segments;
+	int qlen = 0;
+	while(qlen < len) {
+		const int clen = BufferIO::Read<int32_t>(qbuf);
+		qlen += clen;
+		if (clen <= LEN_HEADER)
+			continue;
+		auto position = GetPosition(qbuf, 8);
+		const bool hide_code = NetServer::ShouldHideFacedownCode(position);
+		position = NetServer::StripRevealFlag(qbuf, 8);
+		if (hide_code)
+			hidden_segments.emplace_back(qbuf, clen);
+		qbuf += clen - 4;
+	}
+	NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
+	for(const auto& segment : hidden_segments)
+		std::memset(segment.first, 0, segment.second - 4);
+	NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer.data(), len + 3);
+	for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+		NetServer::ReSendToPlayer(*pit);
+}
+void SingleDuel::RefreshSzone(int player, int flag, int use_cache) {
+	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
+	auto qbuf = query_buffer.data();
+	auto len = WriteUpdateData(player, LOCATION_SZONE, flag, qbuf, use_cache);
+	std::vector<std::pair<unsigned char*, int>> hidden_segments;
+	int qlen = 0;
+	while(qlen < len) {
+		const int clen = BufferIO::Read<int32_t>(qbuf);
+		qlen += clen;
+		if (clen <= LEN_HEADER)
+			continue;
+		auto position = GetPosition(qbuf, 8);
+		const bool hide_code = NetServer::ShouldHideFacedownCode(position);
+		position = NetServer::StripRevealFlag(qbuf, 8);
+		if (hide_code)
+			hidden_segments.emplace_back(qbuf, clen);
+		qbuf += clen - 4;
+	}
+	NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
+	for(const auto& segment : hidden_segments)
+		std::memset(segment.first, 0, segment.second - 4);
+	NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer.data(), len + 3);
+	for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+		NetServer::ReSendToPlayer(*pit);
+}
+void SingleDuel::RefreshHand(int player, int flag, int use_cache) {
+	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
+	auto qbuf = query_buffer.data();
+	auto len = WriteUpdateData(player, LOCATION_HAND, flag, qbuf, use_cache);
+	NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
+	int qlen = 0;
+	while(qlen < len) {
+		const int slen = BufferIO::Read<int32_t>(qbuf);
+		qlen += slen;
+		if (slen <= LEN_HEADER)
+			continue;
+		auto position = GetPosition(qbuf, 8);
+		if(!(position & POS_FACEUP))
+			std::memset(qbuf, 0, slen - 4);
+		qbuf += slen - 4;
+	}
+	NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer.data(), len + 3);
+	for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+		NetServer::ReSendToPlayer(*pit);
+}
+void SingleDuel::RefreshGrave(int player, int flag, int use_cache) {
+	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
+	auto qbuf = query_buffer.data();
+	auto len = WriteUpdateData(player, LOCATION_GRAVE, flag, qbuf, use_cache);
+	NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, query_buffer.data(), len + 3);
+	NetServer::ReSendToPlayer(players[1]);
+	for(auto pit = observers.begin(); pit != observers.end(); ++pit)
+		NetServer::ReSendToPlayer(*pit);
+}
+void SingleDuel::RefreshExtra(int player, int flag, int use_cache) {
+	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
+	auto qbuf = query_buffer.data();
+	auto len = WriteUpdateData(player, LOCATION_EXTRA, flag, qbuf, use_cache);
+	NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer.data(), len + 3);
+}
+void SingleDuel::RefreshSingle(int player, int location, int sequence, int flag) {
+	flag |= (QUERY_CODE | QUERY_POSITION);
+	unsigned char query_buffer[0x1000];
+	auto qbuf = query_buffer;
+	BufferIO::Write<uint8_t>(qbuf, MSG_UPDATE_CARD);
+	BufferIO::Write<uint8_t>(qbuf, player);
+	BufferIO::Write<uint8_t>(qbuf, location);
+	BufferIO::Write<uint8_t>(qbuf, sequence);
+	int len = query_card(pduel, player, location, sequence, flag, qbuf, 0);
+	if (len <= LEN_HEADER) {
+		NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer, len + 4);
+		return;
+	}
+	auto position = GetPosition(qbuf, 12);
+	bool hide_code = position & POS_FACEDOWN;
+	if (location & LOCATION_ONFIELD) {
+		hide_code = NetServer::ShouldHideFacedownCode(position);
+		position = NetServer::StripRevealFlag(qbuf, 12);
+	}
+	NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer, len + 4);
+	if (hide_code) {
+		BufferIO::Write<int32_t>(qbuf, 16);
+		BufferIO::Write<uint32_t>(qbuf, QUERY_CODE | QUERY_POSITION);
+		BufferIO::Write<uint32_t>(qbuf, 0);
+		// keep the 4 bytes position data
+		len = 16;
+	}
+	NetServer::SendBufferToPlayer(players[1 - player], STOC_GAME_MSG, query_buffer, len + 4);
+	for (auto pit = observers.begin(); pit != observers.end(); ++pit)
+		NetServer::ReSendToPlayer(*pit);
+}
+uint32_t SingleDuel::MessageHandler(intptr_t fduel, uint32_t type) {
+	char msgbuf[1024];
+	get_log_message(fduel, msgbuf);
+	mainGame->AddDebugMsg(msgbuf);
+	return 0;
+}
+void SingleDuel::SingleTimer(evutil_socket_t fd, short events, void* arg) {
+	SingleDuel* sd = static_cast<SingleDuel*>(arg);
+	sd->time_elapsed++;
+	if(sd->time_elapsed >= sd->time_limit[sd->last_response] || sd->time_limit[sd->last_response] <= 0) {
+		unsigned char wbuf[3];
+		uint32_t player = sd->last_response;
+		wbuf[0] = MSG_WIN;
+		wbuf[1] = 1 - player;
+		wbuf[2] = 0x3;
+		NetServer::SendBufferToPlayer(sd->players[0], STOC_GAME_MSG, wbuf, 3);
+		NetServer::ReSendToPlayer(sd->players[1]);
+		for(auto oit = sd->observers.begin(); oit != sd->observers.end(); ++oit)
+			NetServer::ReSendToPlayer(*oit);
+		if(sd->players[player] == sd->pplayer[player]) {
+			sd->match_result[sd->duel_count++] = 1 - player;
+			sd->tp_player = player;
+		} else {
+			sd->match_result[sd->duel_count++] = player;
+			sd->tp_player = 1 - player;
+		}
+		sd->EndDuel();
+		sd->DuelEndProc();
+		event_del(sd->etimer);
+		return;
+	}
+	timeval timeout = { 1, 0 };
+	event_add(sd->etimer, &timeout);
+}
 
 }
