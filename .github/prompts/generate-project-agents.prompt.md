@@ -1,6 +1,6 @@
 ---
 name: "Generate Project Agents"
-description: "Generate or refresh only the fixed six-pack swarm-forge agents from the local knowledge base and current codebase, adding repository-specific constraints to those roles."
+description: "Generate or refresh only the fixed core agent set from the local knowledge base and current codebase, adding repository-specific constraints to those roles."
 agent: "agent"
 model: "GPT-5 (copilot)"
 tools: [read, search, edit]
@@ -9,24 +9,26 @@ argument-hint: "Optional focus, such as backend API, mobile app, data pipeline, 
 
 Read the repository knowledge base in `knowledge-base/` and inspect the current codebase shape.
 
-Then generate or refresh only these six custom agents under `.github/agents/`:
+Then generate or refresh only these custom agents under `.github/agents/`:
 
+- `swarm-orchestrator.agent.md`
 - `specifier.agent.md`
 - `coder.agent.md`
-- `cleaner.agent.md`
 - `architect.agent.md`
-- `hardender.agent.md`
 - `qa.agent.md`
+- `doc-maintainer.agent.md`
+- `game-design.agent.md` (on-demand, game design and balance only)
 
 Requirements:
 
-- Do not invent new core roles or replace these six with module-specialist roles.
-- Preserve the fixed six-pack responsibilities from swarm-forge.
-- Add repository-specific constraints to each role, such as language rules, subsystem focus, build commands, testing requirements, and workflow expectations.
+- Do not invent new core roles or replace these with module-specialist roles.
+- `Coder` owns implementation, cleanup, and hardening as three stages inside one task; do not split them into separate agents.
+- `game-design` merges gameplay design and balance review; it never writes code.
+- Add repository-specific constraints to each role, but do not copy build commands or language rules into every agent: they live in `.github/instructions/engineering.instructions.md`, and the skill-role mapping lives only in `.github/instructions/knowledge-base.instructions.md`.
 - Reuse existing agent files if they are already close to correct.
 - Keep descriptions keyword-rich so Copilot can discover them.
 - Ensure the agents reflect the real architecture, testing workflow, and delivery process from `knowledge-base/`.
-- For battleground work, generated agents must treat `battleground-roadmap.md` as the only task/status/acceptance source, `battleground-tech.md` as implementation evidence, and `task-numbering.md` as numbering rules only.
+- For battleground work, generated agents must treat `battleground-tech.md` as the interface/risk source and `battleground-implemented.md` as the completed-capability and `M*` numbering source. Unimplemented work is never recorded.
 - Treat `memories/` as non-authoritative recovery context. QA is read-only and hands off proposed status, milestone completion dates, and evidence; only Doc Maintainer edits `knowledge-base/` or `memories/`.
 - If the knowledge base is incomplete, keep the supplementation conservative and call out what is missing.
 

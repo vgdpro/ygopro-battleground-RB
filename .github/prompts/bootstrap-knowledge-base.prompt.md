@@ -23,8 +23,8 @@ Requirements:
 - Call out uncertainty when the repository does not provide enough evidence.
 - Prefer practical guidance that future agents can act on.
 - If a knowledge-base file already contains useful curated content, preserve and refine it instead of replacing it blindly.
-- Preserve the battleground authority split: game design for player rules, design for architecture, roadmap for tasks/status/acceptance, tech for implementation evidence, and task-numbering for numbering rules, rollback records, and legacy mappings.
-- Do not regenerate task tables in `battleground-game-design.md`, `battleground-tech.md`, or `task-numbering.md`.
+- Preserve the battleground authority split: game design for player rules, design for architecture, tech for interfaces and risks, implemented for completed capabilities and `M*` numbering.
+- Do not record plans, dependencies, milestones, acceptance checklists, or unimplemented work in any knowledge-base file.
 - Check whether the `/memories/repo/` recovery summaries need synchronization, but never let memory override knowledge-base facts.
 
 Minimum output:

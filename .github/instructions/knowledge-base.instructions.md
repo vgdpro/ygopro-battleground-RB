@@ -13,29 +13,24 @@ applyTo: "**"
 
 ## 知识库文件索引
 
-| 文件                          | 类型 | 内容                                                           |
-| ----------------------------- | ---- | -------------------------------------------------------------- |
-| `project-overview.md`         | 通用 | 项目定位、核心流程、高风险区域                                 |
-| `architecture.md`             | 通用 | 模块结构、边界、数据流、不变量                                 |
-| `standards.md`                | 通用 | 编码规范、设计偏好、范围规则                                   |
-| `testing.md`                  | 通用 | 验证顺序、测试布局、区域命令                                   |
-| `workflow.md`                 | 通用 | 交付流程、开发路径、发布门禁                                   |
-| `battleground-game-design.md` | 战旗 | **玩法设计**：核心循环、规则语义、平衡目标、待确认决策         |
-| `battleground-design.md`      | 战旗 | **架构设计**：单 duel 三 field、field 分配、核心约束           |
-| `battleground-roadmap.md`     | 战旗 | **任务路线图**：里程碑、任务、依赖、状态、验收标准             |
-| `battleground-tech.md`        | 战旗 | **技术实现**：接口、实现文件、风险、精简验证证据               |
-| `task-numbering.md`           | 流程 | **任务编号规则**：编号格式、分配规则、状态回退记录、旧编号映射 |
-| `doc-standards.md`            | 通用 | **文档编写规范**：格式、内容规则、代码对比修正规则             |
+| 文件                          | 类型 | 内容                                       |
+| ----------------------------- | ---- | ------------------------------------------ |
+| `README.md`                   | 通用 | 项目定位、核心流程、文件索引               |
+| `architecture.md`             | 通用 | 模块结构、边界、数据流、不变量             |
+| `testing.md`                  | 通用 | 测试布局、验证顺序、陷阱、发布门禁         |
+| `battleground-game-design.md` | 战旗 | **玩法设计**：规则语义、平衡目标、`BAL-*`  |
+| `battleground-design.md`      | 战旗 | **架构设计**：单 duel 多 field、field 分配 |
+| `battleground-tech.md`        | 战旗 | **技术实现**：接口、实现行为、已知风险     |
+| `battleground-implemented.md` | 战旗 | **已实现清单**：`M*` 编号台账              |
 
 ## 战旗模式知识库使用规则
 
 - `battleground-game-design.md` 是**玩法权威**：记录玩家可感知规则、设计理由和平衡目标；未经用户确认的提案不得写成既定规则
-- `battleground-design.md` 是**设计权威**：任何架构决策必须先对照此文档，修改设计文档需 Specifier 确认
-- `battleground-roadmap.md` 是**任务权威**：里程碑、任务编号、依赖、状态和验收标准只在此维护
-- `battleground-tech.md` 是**实现事实权威**：记录接口、实现行为、文件归属、风险和精简验证证据，不维护任务状态
-- `task-numbering.md` 是**编号制度权威**：只记录编号格式、分配规则、状态回退记录和旧编号映射，不复制任务表
-- `doc-standards.md` 是**编写规范权威**：所有知识库和记忆库文件的编辑必须遵循此规范
-- Swarm 维护分工：Specifier 输出任务、依赖和验收标准；Architect/Orchestrator 输出已确认架构决策；QA 输出状态、完成日期和精简验证证据；仅 Doc Maintainer 编辑知识库，并在状态显著变化时同步 `memories/`
+- `battleground-design.md` 是**设计权威**：任何架构决策必须先对照此文档
+- `battleground-tech.md` 是**实现事实权威**：记录接口、实现行为、文件归属和风险，不维护状态与验证日志
+- `battleground-implemented.md` 是**编号与已实现权威**：只记录已完成能力；未实现内容不登记，编号不连续即为未实现或已废弃
+- 编号规则（`M*` / `BAL-*`）与文档格式规范统一维护在 `.github/instructions/doc-maintainer.instructions.md`
+- Swarm 维护分工：Specifier 输出范围与改动说明；Architect/Orchestrator 输出已确认架构决策；QA 输出验证结论；仅 Doc Maintainer 编辑知识库，并在状态显著变化时同步 `memories/`
 - `memories/` 是非权威恢复摘要；发生冲突时以对应 knowledge-base 权威文件为准
 - 文档格式清理和过期内容删除由 **doc-maintainer** agent 负责（斜杠 `/doc-maintainer` 调用，或编辑知识库文件时自动加载 `.github/instructions/doc-maintainer.instructions.md`)
 
@@ -65,36 +60,35 @@ applyTo: "**"
 
 | 技能                             | 源  | 用途                                                               | 主要角色                                                 |
 | -------------------------------- | --- | ------------------------------------------------------------------ | -------------------------------------------------------- |
-| `codebase-design`                | P   | 深模块设计、接口与接缝                                             | Coder、Cleaner、Architect、Specifier                     |
-| `diagnosing-bugs`                | P   | 硬 bug 的诊断循环，先建反馈回路                                    | Coder、Cleaner、Hardender、QA                            |
+| `codebase-design`                | P   | 深模块设计、接口与接缝                                             | Coder、Architect、Specifier                              |
+| `diagnosing-bugs`                | P   | 硬 bug 的诊断循环，先建反馈回路                                    | Coder、QA                                                |
 | `code-review`                    | P   | 双轴审查（规范 + 需求）                                            | QA                                                       |
 | `domain-modeling`                | P   | 挑战术语、固化领域模型与 ADR                                       | Architect、Specifier、doc-maintainer                     |
-| `resolving-merge-conflicts`      | P   | 逐块解决合并/变基冲突                                              | Coder、Swarm Orchestrator                                |
 | `grilling`                       | P   | 结构化追问，澄清歧义                                               | Specifier、Swarm Orchestrator                            |
 | `writing-for-agents`             | P   | 为 agent 编写提示词与技能定义                                      | Swarm Orchestrator                                       |
-| `cpp-pro`                        | C   | 惯用 C++、RAII、内存安全                                           | Coder、Cleaner、Hardender、QA                            |
+| `cpp-pro`                        | C   | 惯用 C++、RAII、内存安全                                           | Coder、QA                                                |
 | `c-pro`                          | C   | 指针运算、内存管理、C 风格接口                                     | Coder                                                    |
-| `error-handling-patterns`        | C   | 错误传播、提前返回、优雅降级                                       | Coder、Hardender                                         |
-| `sharp-edges`                    | C   | 识别易错 API 与危险配置                                            | Coder、Hardender                                         |
+| `error-handling-patterns`        | C   | 错误传播、提前返回、优雅降级                                       | Coder                                                    |
+| `sharp-edges`                    | C   | 识别易错 API 与危险配置                                            | Coder                                                    |
 | `find-bugs`                      | C   | 分支改动中的缺陷与质量问题                                         | Coder、QA                                                |
 | `performance-profiling`          | C   | 先测量、再分析、后优化                                             | Coder、QA                                                |
-| `verification-before-completion` | C   | 证据先于断言                                                       | Coder、Cleaner、Hardender、QA                            |
-| `codebase-cleanup-tech-debt`     | C   | 识别并量化局部技术债                                               | Cleaner                                                  |
+| `verification-before-completion` | C   | 证据先于断言                                                       | Coder、QA                                                |
+| `codebase-cleanup-tech-debt`     | C   | 识别并量化局部技术债                                               | Coder                                                    |
 | `architecture`                   | C   | 架构决策框架、权衡评估                                             | Architect                                                |
 | `architecture-decision-records`  | C   | ADR 标准写法                                                       | Architect、Specifier、doc-maintainer、Swarm Orchestrator |
 | `c4-code`                        | C   | 代码级组件边界与依赖梳理                                           | Architect                                                |
-| `threat-modeling-expert`         | C   | 威胁建模、攻击面识别                                               | Architect、Hardender                                     |
-| `security-auditor`               | C   | 安全审计检查项                                                     | Hardender                                                |
-| `protocol-reverse-engineering`   | C   | 协议字段与边界推断                                                 | Hardender                                                |
-| `binary-analysis-patterns`       | C   | 崩溃定位、内存转储分析                                             | Hardender                                                |
-| `game-development`               | C   | 游戏开发编排（含 `multiplayer`、`game-design`、`pc-games` 子技能） | Architect、QA、Game Designer、Balance Analyst            |
-| `brainstorming`                  | C   | 把模糊想法转化为可比较方案                                         | Game Designer                                            |
-| `scientific-critical-thinking`   | C   | 证据等级评估                                                       | Balance Analyst                                          |
-| `statistical-analysis`           | C   | 样本量与判读方法                                                   | Balance Analyst                                          |
+| `threat-modeling-expert`         | C   | 威胁建模、攻击面识别                                               | Architect、Coder                                         |
+| `security-auditor`               | C   | 安全审计检查项                                                     | Coder                                                    |
+| `protocol-reverse-engineering`   | C   | 协议字段与边界推断                                                 | Coder                                                    |
+| `binary-analysis-patterns`       | C   | 崩溃定位、内存转储分析                                             | Coder                                                    |
+| `game-development`               | C   | 游戏开发编排（含 `multiplayer`、`game-design`、`pc-games` 子技能） | Architect、QA、game-design                               |
+| `brainstorming`                  | C   | 把模糊想法转化为可比较方案                                         | game-design                                              |
+| `scientific-critical-thinking`   | C   | 证据等级评估                                                       | game-design                                              |
+| `statistical-analysis`           | C   | 样本量与判读方法                                                   | game-design                                              |
 | `markdown-mermaid-writing`       | C   | Markdown 与 Mermaid 规范、文档模板                                 | Architect、doc-maintainer                                |
 | `documentation-templates`        | C   | README / API 文档结构约定                                          | doc-maintainer                                           |
 | `plan-writing`                   | C   | 任务拆解、依赖排序、验证判据                                       | Specifier、Swarm Orchestrator                            |
-| `simplify-codebase`              | S   | 代码简化与死代码清理（独立学科）                                   | Cleaner                                                  |
+| `simplify-codebase`              | S   | 代码简化与死代码清理（独立学科）                                   | Coder                                                    |
 
 > `game-development` 为编排技能，`multiplayer`、`game-design`、`pc-games` 是其子技能；顶层联接已包含子技能，**不得在源仓库内创建嵌套联接**。
 

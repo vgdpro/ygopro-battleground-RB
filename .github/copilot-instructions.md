@@ -14,13 +14,13 @@ Use the repository knowledge base before making design or implementation decisio
 
 When a task is not trivial, inspect the most relevant files in this order:
 
-1. `knowledge-base/project-overview.md`
+1. `knowledge-base/README.md`
 2. The most relevant topic file under `knowledge-base/`
 3. The nearest implementation files and tests in the repository
 
-> 战旗玩法与平衡讨论参考 `knowledge-base/battleground-game-design.md`；技术架构参考 `knowledge-base/battleground-design.md`；里程碑、任务、依赖、状态和验收标准以 `knowledge-base/battleground-roadmap.md` 为唯一权威；接口、实现细节、风险和验证证据参考 `knowledge-base/battleground-tech.md`；编号规则与旧编号映射参考 `knowledge-base/task-numbering.md`。
-> 文档编辑规范参考 `knowledge-base/doc-standards.md`。
-> `memories/` 只用于快速恢复上下文，不得覆盖知识库中的任务状态、架构或玩法结论。
+> 战旗玩法与平衡讨论参考 `knowledge-base/battleground-game-design.md`；技术架构与设计决策参考 `knowledge-base/battleground-design.md`；接口、实现行为与已知风险参考 `knowledge-base/battleground-tech.md`；已实现能力与 `M*` 编号参考 `knowledge-base/battleground-implemented.md`。
+> 编码规范、构建命令与高风险区域见 `.github/instructions/engineering.instructions.md`；文档格式与编号规则见 `.github/instructions/doc-maintainer.instructions.md`。
+> `memories/` 只用于快速恢复上下文，不得覆盖知识库中的架构或玩法结论。
 
 ## Working Style
 
