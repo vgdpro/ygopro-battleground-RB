@@ -30,7 +30,7 @@ applyTo: "**"
 - `battleground-tech.md` 是**实现事实权威**：记录接口、实现行为、文件归属和风险，不维护状态与验证日志
 - `battleground-implemented.md` 是**编号与已实现权威**：只记录已完成能力；未实现内容不登记，编号不连续即为未实现或已废弃
 - 编号规则（`M*` / `BAL-*`）与文档格式规范统一维护在 `.github/instructions/doc-maintainer.instructions.md`
-- Swarm 维护分工：Specifier 输出范围与改动说明；Architect/Orchestrator 输出已确认架构决策；QA 输出验证结论；仅 Doc Maintainer 编辑知识库，并在状态显著变化时同步 `memories/`
+- Swarm 维护分工：Specifier 输出范围与改动说明；Orchestrator 输出已确认架构决策；Reviewer 输出架构审查与验证结论；仅 Doc Maintainer 编辑知识库，并在状态显著变化时同步 `memories/`
 - `memories/` 是非权威恢复摘要；发生冲突时以对应 knowledge-base 权威文件为准
 - 文档格式清理和过期内容删除由 **doc-maintainer** agent 负责（斜杠 `/doc-maintainer` 调用，或编辑知识库文件时自动加载 `.github/instructions/doc-maintainer.instructions.md`)
 
@@ -60,32 +60,32 @@ applyTo: "**"
 
 | 技能                             | 源  | 用途                                                               | 主要角色                                                 |
 | -------------------------------- | --- | ------------------------------------------------------------------ | -------------------------------------------------------- |
-| `codebase-design`                | P   | 深模块设计、接口与接缝                                             | Coder、Architect、Specifier                              |
-| `diagnosing-bugs`                | P   | 硬 bug 的诊断循环，先建反馈回路                                    | Coder、QA                                                |
-| `code-review`                    | P   | 双轴审查（规范 + 需求）                                            | QA                                                       |
-| `domain-modeling`                | P   | 挑战术语、固化领域模型与 ADR                                       | Architect、Specifier、doc-maintainer                     |
+| `codebase-design`                | P   | 深模块设计、接口与接缝                                             | Coder、Specifier、Reviewer                                |
+| `diagnosing-bugs`                | P   | 硬 bug 的诊断循环，先建反馈回路                                    | Coder、Reviewer                                           |
+| `code-review`                    | P   | 双轴审查（规范 + 需求）                                            | Reviewer                                                  |
+| `domain-modeling`                | P   | 挑战术语、固化领域模型与 ADR                                       | Specifier、doc-maintainer、Reviewer                       |
 | `grilling`                       | P   | 结构化追问，澄清歧义                                               | Specifier、Swarm Orchestrator                            |
 | `writing-for-agents`             | P   | 为 agent 编写提示词与技能定义                                      | Swarm Orchestrator                                       |
-| `cpp-pro`                        | C   | 惯用 C++、RAII、内存安全                                           | Coder、QA                                                |
+| `cpp-pro`                        | C   | 惯用 C++、RAII、内存安全                                           | Coder、Reviewer                                           |
 | `c-pro`                          | C   | 指针运算、内存管理、C 风格接口                                     | Coder                                                    |
 | `error-handling-patterns`        | C   | 错误传播、提前返回、优雅降级                                       | Coder                                                    |
 | `sharp-edges`                    | C   | 识别易错 API 与危险配置                                            | Coder                                                    |
-| `find-bugs`                      | C   | 分支改动中的缺陷与质量问题                                         | Coder、QA                                                |
-| `performance-profiling`          | C   | 先测量、再分析、后优化                                             | Coder、QA                                                |
-| `verification-before-completion` | C   | 证据先于断言                                                       | Coder、QA                                                |
+| `find-bugs`                      | C   | 分支改动中的缺陷与质量问题                                         | Coder、Reviewer                                           |
+| `performance-profiling`          | C   | 先测量、再分析、后优化                                             | Coder、Reviewer                                           |
+| `verification-before-completion` | C   | 证据先于断言                                                       | Coder、Reviewer                                           |
 | `codebase-cleanup-tech-debt`     | C   | 识别并量化局部技术债                                               | Coder                                                    |
-| `architecture`                   | C   | 架构决策框架、权衡评估                                             | Architect                                                |
-| `architecture-decision-records`  | C   | ADR 标准写法                                                       | Architect、Specifier、doc-maintainer、Swarm Orchestrator |
-| `c4-code`                        | C   | 代码级组件边界与依赖梳理                                           | Architect                                                |
-| `threat-modeling-expert`         | C   | 威胁建模、攻击面识别                                               | Architect、Coder                                         |
+| `architecture`                   | C   | 架构决策框架、权衡评估                                             | Reviewer                                                  |
+| `architecture-decision-records`  | C   | ADR 标准写法                                                       | Specifier、doc-maintainer、Reviewer、Swarm Orchestrator  |
+| `c4-code`                        | C   | 代码级组件边界与依赖梳理                                           | Reviewer                                                  |
+| `threat-modeling-expert`         | C   | 威胁建模、攻击面识别                                               | Coder、Reviewer                                           |
 | `security-auditor`               | C   | 安全审计检查项                                                     | Coder                                                    |
 | `protocol-reverse-engineering`   | C   | 协议字段与边界推断                                                 | Coder                                                    |
 | `binary-analysis-patterns`       | C   | 崩溃定位、内存转储分析                                             | Coder                                                    |
-| `game-development`               | C   | 游戏开发编排（含 `multiplayer`、`game-design`、`pc-games` 子技能） | Architect、QA、game-design                               |
+| `game-development`               | C   | 游戏开发编排（含 `multiplayer`、`game-design`、`pc-games` 子技能） | Reviewer、game-design                                     |
 | `brainstorming`                  | C   | 把模糊想法转化为可比较方案                                         | game-design                                              |
 | `scientific-critical-thinking`   | C   | 证据等级评估                                                       | game-design                                              |
 | `statistical-analysis`           | C   | 样本量与判读方法                                                   | game-design                                              |
-| `markdown-mermaid-writing`       | C   | Markdown 与 Mermaid 规范、文档模板                                 | Architect、doc-maintainer                                |
+| `markdown-mermaid-writing`       | C   | Markdown 与 Mermaid 规范、文档模板                                 | doc-maintainer、Reviewer                                  |
 | `documentation-templates`        | C   | README / API 文档结构约定                                          | doc-maintainer                                           |
 | `plan-writing`                   | C   | 任务拆解、依赖排序、验证判据                                       | Specifier、Swarm Orchestrator                            |
 | `simplify-codebase`              | S   | 代码简化与死代码清理（独立学科）                                   | Coder                                                    |

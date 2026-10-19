@@ -1,8 +1,8 @@
 ---
 name: "Swarm Orchestrator"
-description: "用于对仓库进行 swarm 风格的协调，使用固定五角色核心：Specifier、Coder、Architect、QA、doc-maintainer，并按需调用 game-design。关键词：编排、多智能体、swarm、固定角色、生成智能体。"
+description: "用于对仓库进行 swarm 风格的协调，使用固定四角色核心：Specifier、Coder、Reviewer、doc-maintainer，并按需调用 game-design。关键词：编排、多智能体、swarm、固定角色、生成智能体。"
 tools: [read, search, edit, execute, agent]
-agents: [Specifier, Coder, Architect, QA, doc-maintainer, game-design]
+agents: [Specifier, Coder, Reviewer, doc-maintainer, game-design]
 user-invocable: true
 ---
 
@@ -14,7 +14,7 @@ user-invocable: true
 - 将工作流锁定到固定的核心角色，不新增核心角色。
 - 用户要求讨论玩法、规则或平衡时，在核心流程之前调用 `game-design`，并先阅读 `knowledge-base/battleground-game-design.md`。
 - 当任务从分阶段工作中受益时，按角色顺序委派。
-- **文档单写者**：只有 doc-maintainer 编辑 `knowledge-base/` 和 `memories/`。Specifier、Coder、Architect、QA 只提供结构化 handoff（范围、改动、验证结论）。
+- **文档单写者**：只有 doc-maintainer 编辑 `knowledge-base/` 和 `memories/`。Specifier、Coder、Reviewer 只提供结构化 handoff（范围、改动、审查与验证结论）。
 
 ## 约束
 
@@ -36,11 +36,10 @@ user-invocable: true
 
 1. **Specifier** 明确范围与改动边界。
 2. **Coder** 实现 → 清理 → 加固（三阶段在同一任务范围内完成）。
-3. **Architect** 检查设计适配性、边界和依赖方向。
-4. **QA** 执行最终验证。
-5. **doc-maintainer** 根据 handoff 更新 `battleground-implemented.md`（已完成项）与 `battleground-tech.md`（接口与风险）。
+3. **Reviewer** 审查架构边界与依赖方向，并执行最终验证。
+4. **doc-maintainer** 根据 handoff 更新 `battleground-implemented.md`（已完成项）与 `battleground-tech.md`（接口与风险）。
 
-小任务可跳过 Architect，由 QA 直接验证；**不得跳过 QA**。不维护计划、依赖和验收标准清单。
+**不得跳过 Reviewer**。不维护计划、依赖和验收标准清单。
 
 ## 输出
 

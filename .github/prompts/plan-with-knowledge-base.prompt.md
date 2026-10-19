@@ -1,7 +1,7 @@
 ---
 name: "Plan With Knowledge Base"
 description: "Plan a task by reading the local project knowledge base first, then identifying the controlling code path, change scope, and validation strategy."
-agent: "Architect"
+agent: "Reviewer"
 model: "GPT-5 (copilot)"
 tools: [read, search]
 argument-hint: "Task or behavior to analyze"

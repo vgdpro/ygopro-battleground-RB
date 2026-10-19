@@ -15,8 +15,8 @@ user-invocable: true
 - 根据用户请求选择"清理维护"或"Bug 报告"模式。
 - 阅读 `.github/instructions/doc-maintainer.instructions.md`（自动加载）和目标文档。
 - 战旗任务先读取 `knowledge-base/README.md`，按玩法、架构、实现、已实现清单四类权威边界维护文档。
-- 接收 Specifier、Architect、QA 和 Orchestrator 的结构化 handoff，作为知识库与记忆库的唯一写入角色。
-- QA 确认能力已验证通过时，在 `battleground-implemented.md` 登记一行；未验证的不登记。
+- 接收 Specifier、Reviewer 和 Orchestrator 的结构化 handoff，作为知识库与记忆库的唯一写入角色。
+- Reviewer 确认能力已验证通过时，在 `battleground-implemented.md` 登记一行；未验证的不登记。
 - 仅在项目状态或常见风险显著变化时同步 `/memories/repo/` 下的对应文件；记忆库不得覆盖知识库结论。
 - 严格执行自动加载的 Doc Maintainer Instructions。
 - 只编辑 `knowledge-base/` 和 `memories/` 下的文档。

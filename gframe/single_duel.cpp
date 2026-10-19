@@ -15,6 +15,11 @@ SingleDuel::SingleDuel(bool is_match) {
 }
 SingleDuel::~SingleDuel() {
 }
+// 切换当前生效的家园场：gframe 侧镜像与引擎侧 game_field 必须成对更新
+void SingleDuel::ActivateField(unsigned char field) {
+	active_field = field;
+	set_active_field(pduel, field);
+}
 void SingleDuel::Chat(DuelPlayer* dp, unsigned char* pdata, int len) {
 	unsigned char scc[SIZE_STOC_CHAT];
 	const auto scc_size = NetServer::CreateChatPacket(pdata, len, scc, dp->type);
@@ -525,36 +530,41 @@ void SingleDuel::TPResult(DuelPlayer* dp, unsigned char tp) {
 	last_replay.WriteInt32(host_info.draw_count, false);
 	last_replay.WriteInt32(opt, false);
 	last_replay.Flush();
-	auto load = [&](const std::vector<const CardDataC*>& deck_container, uint8_t p, uint8_t location) {
+	auto load = [&](const std::vector<const CardDataC*>& deck_container, uint8_t field, uint8_t location) {
 		last_replay.WriteInt32(deck_container.size(), false);
 		for (auto cit = deck_container.rbegin(); cit != deck_container.rend(); ++cit) {
-			new_card(pduel, (*cit)->code, p, p, location, 0, POS_FACEDOWN_DEFENSE);
+			new_card(pduel, (*cit)->code, 0, 0, location, 0, POS_FACEDOWN_DEFENSE, field);
 			last_replay.WriteInt32((*cit)->code, false);
 		}
 	};
-	load(pdeck[0].main, 0, LOCATION_DECK);
-	load(pdeck[0].extra, 0, LOCATION_EXTRA);
-	load(pdeck[1].main, 1, LOCATION_DECK);
-	load(pdeck[1].extra, 1, LOCATION_EXTRA);
+	// 每个家园场只装自己的牌，装牌前必须切到该场
+	for(uint8_t field = 0; field < HOME_FIELD_COUNT; ++field) {
+		ActivateField(field);
+		load(pdeck[field].main, field, LOCATION_DECK);
+		load(pdeck[field].extra, field, LOCATION_EXTRA);
+	}
 	last_replay.Flush();
+	// 每个家园场各自发一份 MSG_START：场主视角下引擎侧玩家号为 0，对手数据填 0
 	unsigned char startbuf[32]{};
-	auto pbuf = startbuf;
-	BufferIO::Write<uint8_t>(pbuf, MSG_START);
-	BufferIO::Write<uint8_t>(pbuf, 0);
-	BufferIO::Write<uint8_t>(pbuf, host_info.duel_rule);
-	BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
-	BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
-	BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 0, LOCATION_DECK));
-	BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 0, LOCATION_EXTRA));
-	BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 1, LOCATION_DECK));
-	BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, 1, LOCATION_EXTRA));
-	NetServer::SendBufferToPlayer(players[0], STOC_GAME_MSG, startbuf, 19);
-	startbuf[1] = 1;
-	NetServer::SendBufferToPlayer(players[1], STOC_GAME_MSG, startbuf, 19);
-	if(!swapped)
-		startbuf[1] = 0x10;
-	else
-		startbuf[1] = 0x11;
+	auto build_start = [&](uint8_t field) {
+		auto pbuf = startbuf;
+		BufferIO::Write<uint8_t>(pbuf, MSG_START);
+		BufferIO::Write<uint8_t>(pbuf, 0);
+		BufferIO::Write<uint8_t>(pbuf, host_info.duel_rule);
+		BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
+		BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
+		BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, field, 0, LOCATION_DECK));
+		BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, field, 0, LOCATION_EXTRA));
+		BufferIO::Write<uint16_t>(pbuf, 0);
+		BufferIO::Write<uint16_t>(pbuf, 0);
+		return pbuf - startbuf;
+	};
+	for(uint8_t field = 0; field < HOME_FIELD_COUNT; ++field) {
+		const auto len = build_start(field);
+		NetServer::SendBufferToPlayer(players[field], STOC_GAME_MSG, startbuf, len);
+	}
+	build_start(0);
+	startbuf[1] = swapped ? 0x11 : 0x10;
 	for(auto oit = observers.begin(); oit != observers.end(); ++oit)
 		NetServer::SendBufferToPlayer(*oit, STOC_GAME_MSG, startbuf, 19);
 	if(cache_recorder)
@@ -564,8 +574,10 @@ void SingleDuel::TPResult(DuelPlayer* dp, unsigned char tp) {
 	turn_player = 0;
 	phase = 1;
 	deck_reversed = false;
-	RefreshExtra(0);
-	RefreshExtra(1);
+	for(uint8_t field = 0; field < HOME_FIELD_COUNT; ++field) {
+		ActivateField(field);
+		RefreshExtra(0, 0xe81fff, 1, players[field]);
+	}
 	start_duel(pduel, opt);
 	if(host_info.time_limit) {
 		time_elapsed = 0;
@@ -577,7 +589,11 @@ void SingleDuel::TPResult(DuelPlayer* dp, unsigned char tp) {
 		timeval timeout = { 1, 0 };
 		event_add(etimer, &timeout);
 	}
-	Process();
+	// 开局：每个家园场各自推进到自己的停顿点（start_duel 已向各家园场推入 START/TURN）
+	for(uint8_t field = 0; field < HOME_FIELD_COUNT; ++field) {
+		ActivateField(field);
+		Process();
+	}
 }
 void SingleDuel::Process() {
 	std::vector<unsigned char> engineBuffer;
@@ -1595,6 +1611,9 @@ void SingleDuel::GetResponse(DuelPlayer* dp, unsigned char* pdata, unsigned int 
 		len = UINT8_MAX;
 	std::memcpy(resb, pdata, len);
 	last_replay_response_size = last_replay.WriteResponse(resb, len);
+	// 响应写入当前 field 的 returns，必须先切到响应者所在的家园场
+	if(dp->type < HOME_FIELD_COUNT)
+		ActivateField(dp->type);
 	set_responseb(pduel, resb);
 	players[dp->type]->state = 0xff;
 	if(host_info.time_limit) {
@@ -1633,15 +1652,15 @@ void SingleDuel::EndDuel() {
 	pduel = 0;
 }
 void SingleDuel::WaitforResponse(int playerid) {
+	// 家园场内引擎侧玩家号恒为 0，gframe 侧玩家号即家园场索引
+	playerid = active_field;
 	last_response = playerid;
-	unsigned char msg = MSG_WAITING;
-	NetServer::SendPacketToPlayer(players[1 - playerid], STOC_GAME_MSG, msg);
 	if(host_info.time_limit) {
 		STOC_TimeLimit sctl;
 		sctl.player = playerid;
 		sctl.left_time = time_limit[playerid];
-		NetServer::SendPacketToPlayer(players[0], STOC_TIME_LIMIT, sctl);
-		NetServer::SendPacketToPlayer(players[1], STOC_TIME_LIMIT, sctl);
+		// 只通知本场玩家；对手在其他家园场，不感知本场的等待
+		NetServer::SendPacketToPlayer(players[playerid], STOC_TIME_LIMIT, sctl);
 		players[playerid]->state = CTOS_TIME_CONFIRM;
 	} else
 		players[playerid]->state = CTOS_RESPONSE;
@@ -1686,7 +1705,7 @@ void SingleDuel::RequestField(DuelPlayer* dp) {
 	});
 
 	WriteMsg([&](uint8_t*& pbuf) {
-		auto length = query_field_info(pduel, pbuf);
+		auto length = query_field_info(pduel, player, pbuf);
 		pbuf += length;
 	});
 
@@ -1712,7 +1731,7 @@ void SingleDuel::RequestField(DuelPlayer* dp) {
 	uint8_t query_buffer[SIZE_QUERY_BUFFER];
 	for(uint8_t i = 0; i < 2; ++i) {
 		// get decktop card
-		auto qlen = query_field_card(pduel, i, LOCATION_DECK, QUERY_CODE | QUERY_POSITION, query_buffer, 0);
+		auto qlen = query_field_card(pduel, player, i, LOCATION_DECK, QUERY_CODE | QUERY_POSITION, query_buffer, 0);
 		if(!qlen)
 			continue; // no cards in deck
 		uint8_t *qbuf = query_buffer;
@@ -1772,7 +1791,7 @@ inline int SingleDuel::WriteUpdateData(int player, int location, unsigned int fl
 	BufferIO::Write<uint8_t>(qbuf, MSG_UPDATE_DATA);
 	BufferIO::Write<uint8_t>(qbuf, player);
 	BufferIO::Write<uint8_t>(qbuf, location);
-	int len = query_field_card(pduel, player, location, flag, qbuf, use_cache);
+	int len = query_field_card(pduel, active_field, player, location, flag, qbuf, use_cache);
 	return len;
 }
 void SingleDuel::RefreshMzone(int player, int flag, int use_cache, DuelPlayer* dp)
@@ -1947,7 +1966,7 @@ void SingleDuel::RefreshSingle(int player, int location, int sequence, int flag)
 	BufferIO::Write<uint8_t>(qbuf, player);
 	BufferIO::Write<uint8_t>(qbuf, location);
 	BufferIO::Write<uint8_t>(qbuf, sequence);
-	int len = query_card(pduel, player, location, sequence, flag, qbuf, 0);
+	int len = query_card(pduel, active_field, player, location, sequence, flag, qbuf, 0);
 	if (len <= LEN_HEADER) {
 		NetServer::SendBufferToPlayer(players[player], STOC_GAME_MSG, query_buffer, len + 4);
 		NetServer::ReSendToPlayer(replay_recorder);

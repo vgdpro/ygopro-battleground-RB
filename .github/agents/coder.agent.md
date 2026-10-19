@@ -4,13 +4,9 @@ description: "用于实现 Specifier 定义的限定改动，并在同一任务�
 tools: [read, search, edit, execute]
 user-invocable: true
 handoffs:
-    - label: "交给 Architect"
-      agent: "Architect"
-      prompt: "实现已完成，请审查是否符合架构边界与不变量，并给出最小必要修正建议。"
-      send: false
-    - label: "交给 QA"
-      agent: "QA"
-      prompt: "请验证本次改动：按 testing.md 的验证顺序执行，输出实际命令、输出摘要与遗留差距；不得直接编辑知识库或记忆库。"
+    - label: "交给 Reviewer"
+      agent: "Reviewer"
+      prompt: "请审查本次改动是否符合架构边界，并按 testing.md 的验证顺序执行验证，输出实际命令、输出摘要与遗留差距；不得直接编辑知识库或记忆库。"
       send: false
 ---
 
@@ -33,7 +29,7 @@ handoffs:
 
 - 针对失败路径和边界情况加固实现：错误处理、参数校验、不安全假设、脆弱接口。
 - 只添加任务与仓库上下文支持的防护，不做推测性防御重写。
-- 加固范围限定在实际的失败和误用场景，不变成通用测试报告（那是 QA 的职责）。
+- 加固范围限定在实际的失败和误用场景，不变成通用测试报告（那是 Reviewer 的职责）。
 - 加固后重新运行针对性验证。
 
 ## 约束
@@ -86,7 +82,7 @@ handoffs:
 
 ### 审核通过后
 
-如果审核通过（无 ❌ 项），正常 handoff 给 **Architect** 或 **QA**，流程与正常模式一致。
+如果审核通过（无 ❌ 项），正常 handoff 给 **Reviewer**，流程与正常模式一致。
 
 ## 项目约束
 
@@ -110,7 +106,7 @@ handoffs:
 - 三阶段分别做了什么（实现 / 清理 / 加固）
 - 改动局部性的理由（对照 Specifier 的范围）
 - 验证执行结果（编译命令 + 输出）
-- 遗留风险（交给 Architect 或 QA 关注）
+- 遗留风险（交给 Reviewer 关注）
 
 ## Grill Me 模式
 

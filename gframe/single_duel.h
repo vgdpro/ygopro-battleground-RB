@@ -12,6 +12,9 @@ namespace ygo
     class SingleDuel : public DuelMode
     {
     public:
+        // 单人对战使用 2 个家园场：家园场 i 只容纳玩家 i，场内引擎侧玩家号恒为 0
+        static constexpr uint8_t HOME_FIELD_COUNT = 2;
+
         SingleDuel(bool is_match);
         ~SingleDuel() override;
         void Chat(DuelPlayer *dp, unsigned char *pdata, int len) override;
@@ -48,6 +51,7 @@ namespace ygo
 
     private:
         int WriteUpdateData(int player, int location, unsigned int flag, unsigned char *&qbuf, int use_cache);
+        void ActivateField(unsigned char field);
 
     protected:
         DuelPlayer *players[2]{};
@@ -63,6 +67,7 @@ namespace ygo
         unsigned char turn_player{0};
         unsigned short phase{0};
         bool deck_reversed{false};
+        unsigned char active_field{0};
         Replay last_replay;
         size_t last_replay_response_size{0};
         bool match_mode{false};
