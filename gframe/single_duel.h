@@ -54,7 +54,6 @@ namespace ygo
         void ActivateField(unsigned char field);
 
     protected:
-        DuelPlayer *players[2]{};
         DuelPlayer *pplayer[2]{};
         bool ready[2]{};
         Deck pdeck[2];
@@ -67,7 +66,6 @@ namespace ygo
         unsigned char turn_player{0};
         unsigned short phase{0};
         bool deck_reversed{false};
-        unsigned char active_field{0};
         Replay last_replay;
         size_t last_replay_response_size{0};
         bool match_mode{false};

@@ -228,6 +228,22 @@ public:
 #endif
 	virtual void EndDuel() = 0;
 
+protected:
+	// 家园场 i 只容纳玩家 i，场内引擎侧玩家号恒为 0。
+	// Seat() 把引擎消息里的座位号映射为当前活动场的实际收件人：座位 0 即本场场主，
+	// 其余座位无收件人（返回空指针）。
+	// SendBufferToPlayer 收到空指针时仍构建发送缓冲（供后续 ReSendToPlayer 复用），只是不写 socket。
+	// TODO: 战斗场分发未实现——恢复 MSG_CHANGE_FIELD 时按战斗场配对绑定在此补全。
+	DuelPlayer* Seat(uint8_t engine_player) {
+		if(active_field >= home_field_count)
+			return nullptr;
+		return engine_player == 0 ? players[active_field] : nullptr;
+	}
+
+	DuelPlayer* players[6]{};
+	unsigned char active_field{0};
+	uint8_t home_field_count{0};
+
 public:
 	event* etimer { nullptr };
 	DuelPlayer* host_player{ nullptr };

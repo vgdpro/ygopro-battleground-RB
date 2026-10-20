@@ -22,6 +22,20 @@ When a task is not trivial, inspect the most relevant files in this order:
 > 编码规范、构建命令与高风险区域见 `.github/instructions/engineering.instructions.md`；文档格式与编号规则见 `.github/instructions/doc-maintainer.instructions.md`。
 > `memories/` 只用于快速恢复上下文，不得覆盖知识库中的架构或玩法结论。
 
+## Output Style
+
+**默认生效，无需触发。** 对用户的每条回复按 `.agents/skills/ste-zh/SKILL.md` 的规则写：
+
+- 关键信息先行，一句一事，短句
+- 状态词固定：已完成 / 部分完成 / 未开始 / 进行中 / 已验证 / 未验证 / 失败 / 跳过 / 阻塞 / 未确认
+- 如实写验证状态；未执行的检查写「未验证」
+- 不叙述过程，证据写 `路径:行号` 或完整命令
+- 待决定事项列编号选项，推荐项第一
+
+只管**对话回复**。代码、注释、commit message、写入项目的文件不受约束。
+
+用户说「停止 ste」或「stop ste」后才恢复默认写法。
+
 ## Working Style
 
 - Work in small, reviewable increments.

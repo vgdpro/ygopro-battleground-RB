@@ -12,10 +12,10 @@ description: "Use when planning delivery, splitting work across roles, preparing
 
 ## Grill Me 模式
 
-当用户说 **"grill me"**，或任务在范围、风险、验收标准上存在歧义时，**先**用 `vscode_askQuestions` 一次性提出结构化追问，**再**开始工作。按角色聚焦：
+当用户说 **"grill me"**，或任务在范围、风险、改动边界上存在歧义时，**先**用 `vscode_askQuestions` 一次性提出结构化追问，**再**开始工作。按角色聚焦：
 
 - **范围**：精确边界、明确排除项、P0/P1 裁剪
-- **验收**：如何判定完成、最窄可工作的验证、硬性要求
+- **完成判定**：怎样算做完、最窄可工作的验证、硬性要求
 - **隐含约束**：性能、协议兼容、安全、代码风格、与既有设计的冲突
 - **风险偏好**：最小改动 vs 更健壮、是否允许跨模块
 - **实施路径**：期望落在哪一层（配置 / Lua / gframe / ocgcore）、是否预留扩展点
@@ -25,3 +25,11 @@ description: "Use when planning delivery, splitting work across roles, preparing
 ## 技能使用
 
 技能清单与角色映射以 `.github/instructions/knowledge-base.instructions.md` 为唯一权威。agent 定义不复制技能表，只列本角色**必须**使用的少数技能。
+
+## 交付物输出规则
+
+角色产出（规格、审查结论、验证结果、文档修改说明）是**交付物**，必须完整写在回复正文。
+
+- 思考通道里的草稿不算交付，用户看不到。
+- 不得只输出「已完成，等待确认」而把正文留在思考里。
+- 正文长度由内容决定；简洁指删冗余，不是把交付物藏起来。

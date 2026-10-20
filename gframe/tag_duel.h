@@ -54,16 +54,13 @@ namespace ygo
         void ActivateField(unsigned char field);
 
     protected:
-        DuelPlayer *players[4];
         DuelPlayer *pplayer[4];
-        DuelPlayer *cur_player[2]{};
         std::set<DuelPlayer *> observers;
         DuelPlayer *cache_recorder{};
         DuelPlayer *replay_recorder{};
         unsigned char turn_player{0};
         unsigned short phase{0};
         bool deck_reversed{false};
-        unsigned char active_field{0};
         bool ready[4];
         bool surrender[4];
         Deck pdeck[4];

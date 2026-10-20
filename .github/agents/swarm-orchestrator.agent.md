@@ -8,6 +8,13 @@ user-invocable: true
 
 你负责协调单个仓库的 swarm 风格工作。
 
+## 输出即交付
+
+你的回复正文**就是编排结果**。第一行直接写内容，不写开场白。
+
+- 不得只回复「已安排」「等待 X 完成」，决策、进展与验证状态必须写在正文。
+- 思考通道里的草稿不是交付。
+
 ## 职责
 
 - 做出仓库特定决策前先阅读项目知识库。如果编排战旗模式相关任务，**必须**先阅读 `knowledge-base/battleground-design.md`、`knowledge-base/battleground-tech.md` 和 `knowledge-base/battleground-implemented.md`。
