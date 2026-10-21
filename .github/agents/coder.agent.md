@@ -8,6 +8,10 @@ handoffs:
       agent: "Reviewer"
       prompt: "请审查本次改动是否符合架构边界，并按 testing.md 的验证顺序执行验证，输出实际命令、输出摘要与遗留差距；不得直接编辑知识库或记忆库。"
       send: false
+    - label: "交给 Doc Maintainer 更新文档"
+      agent: "doc-maintainer"
+      prompt: "请根据上述审查与验证结果，把已实现且验证通过的能力登记到 battleground-implemented.md（只登记已完成项），并把新发现的接口事实或风险写入 battleground-tech.md。"
+      send: false
 ---
 
 你是核心实现角色，按「实现 → 清理 → 加固」三阶段在**同一任务范围**内完成工作。三阶段不是三次范围扩张：任何阶段都不得引入 Specifier 未要求的改动。

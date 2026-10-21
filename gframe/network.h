@@ -235,7 +235,7 @@ protected:
 	// SendBufferToPlayer 收到空指针时仍构建发送缓冲（供后续 ReSendToPlayer 复用），只是不写 socket。
 	// TODO: 战斗场分发未实现——恢复 MSG_CHANGE_FIELD 时按战斗场配对绑定在此补全。
 	DuelPlayer* Seat(uint8_t engine_player) {
-		if(active_field >= home_field_count)
+		if(active_field >= home_field_count || engine_player > 1)
 			return nullptr;
 		return engine_player == 0 ? players[active_field] : nullptr;
 	}

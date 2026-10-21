@@ -1895,10 +1895,10 @@ void SingleDuel::RefreshGrave(int player, int flag, int use_cache, DuelPlayer* d
 	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
 	auto qbuf = query_buffer.data();
 	auto len = WriteUpdateData(player, LOCATION_GRAVE, flag, qbuf, use_cache);
-	if(!dp || dp == players[0])
-		NetServer::SendBufferToPlayer(dp ? dp : Seat(0), STOC_GAME_MSG, query_buffer.data(), len + 3);
-	if(!dp || dp == players[1])
-		NetServer::SendBufferToPlayer(dp ? dp : Seat(1), STOC_GAME_MSG, query_buffer.data(), len + 3);
+	if(!dp || dp == players[player])
+		NetServer::SendBufferToPlayer(dp ? dp : Seat(player), STOC_GAME_MSG, query_buffer.data(), len + 3);
+	if(!dp || dp == players[1 - player])
+		NetServer::SendBufferToPlayer(dp ? dp : Seat(1 - player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
 			NetServer::ReSendToPlayer(*pit);
