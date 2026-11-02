@@ -52,6 +52,7 @@ namespace ygo
     private:
         int WriteUpdateData(int player, int location, unsigned int flag, unsigned char *&qbuf, int use_cache);
         void ActivateField(unsigned char field);
+        void SendFieldSnapshot(uint8_t field, DuelPlayer *target);
 
     protected:
         DuelPlayer *pplayer[2]{};

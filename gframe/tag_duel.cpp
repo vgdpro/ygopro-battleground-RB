@@ -1629,25 +1629,43 @@ void TagDuel::WaitforResponse(int playerid) {
 void TagDuel::RequestField(DuelPlayer* dp) {
 	if(dp->type > 3)
 		return;
-	uint8_t player = (dp->type > 1) ? 1 : 0;
 	NetServer::SendPacketToPlayer(dp, STOC_DUEL_START);
+	SendFieldSnapshot(dp->type, dp);
+
+	// time_limit 按队伍记（每队 2 人），last_response 是玩家索引
+	const int resp_type = last_response < 2 ? 0 : 1;
+	STOC_TimeLimit sctl;
+	sctl.player = 1 - last_response;
+	sctl.left_time = time_limit[1 - resp_type];
+	NetServer::SendPacketToPlayer(dp, STOC_TIME_LIMIT, sctl);
+	sctl.player = last_response;
+	sctl.left_time = time_limit[resp_type] - time_elapsed;
+	NetServer::SendPacketToPlayer(dp, STOC_TIME_LIMIT, sctl);
+
+	NetServer::SendPacketToPlayer(dp, STOC_FIELD_FINISH);
+}
+// 按家园场构建并发送完整视角：MSG_START、回合与阶段、全量区域刷新与牌堆顶。
+// 进入前切到该场，返回后保持该场为活动 field，使场内查询与后续步骤同场。
+void TagDuel::SendFieldSnapshot(uint8_t field, DuelPlayer* target) {
+	ActivateField(field);
 
 	uint8_t buf[1024];
 	uint8_t* temp_buf = buf;
 	auto WriteMsg = [&](const std::function<void(uint8_t*&)> &writer) {
 		temp_buf = buf;
 		writer(temp_buf);
-		NetServer::SendBufferToPlayer(dp, STOC_GAME_MSG, buf, temp_buf - buf);
+		NetServer::SendBufferToPlayer(target, STOC_GAME_MSG, buf, temp_buf - buf);
 	};
 
+	// 场主在引擎侧恒为玩家 0；另一侧是虚拟对手，牌数填 0
 	WriteMsg([&](uint8_t*& pbuf) {
 		BufferIO::Write<uint8_t>(pbuf, MSG_START);
-		BufferIO::Write<uint8_t>(pbuf, player);
+		BufferIO::Write<uint8_t>(pbuf, 0);
 		BufferIO::Write<uint8_t>(pbuf, host_info.duel_rule);
-		BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
-		BufferIO::Write<int32_t>(pbuf, host_info.start_lp);
-		BufferIO::Write<uint16_t>(pbuf, 0);
-		BufferIO::Write<uint16_t>(pbuf, 0);
+		BufferIO::Write<int32_t>(pbuf, query_field_lp(pduel, field, 0));
+		BufferIO::Write<int32_t>(pbuf, query_field_lp(pduel, field, 1));
+		BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, field, 0, LOCATION_DECK));
+		BufferIO::Write<uint16_t>(pbuf, query_field_count(pduel, field, 0, LOCATION_EXTRA));
 		BufferIO::Write<uint16_t>(pbuf, 0);
 		BufferIO::Write<uint16_t>(pbuf, 0);
 	});
@@ -1667,28 +1685,32 @@ void TagDuel::RequestField(DuelPlayer* dp) {
 		BufferIO::Write<uint16_t>(pbuf, phase);
 	});
 
-	WriteMsg([&](uint8_t*& pbuf) {
-		auto length = query_field_info(pduel, player, pbuf);
-		pbuf += length;
-	});
+	// MSG_RELOAD_FIELD 长度不定，单独缓冲发送（SIZE_QUERY_BUFFER 为 256KB，走堆避免栈叠加）
+	{
+		std::vector<unsigned char> info_buffer(SIZE_QUERY_BUFFER);
+		const auto info_len = query_field_info(pduel, field, info_buffer.data());
+		if(info_len > 0)
+			NetServer::SendBufferToPlayer(target, STOC_GAME_MSG, info_buffer.data(), info_len);
+	}
 
-	RefreshMzone(1 - player, 0xefffff, 0, dp);
-	RefreshMzone(player, 0xefffff, 0, dp);
-	RefreshSzone(1 - player, 0xefffff, 0, dp);
-	RefreshSzone(player, 0xefffff, 0, dp);
-	RefreshHand(1 - player, 0xefffff, 0, dp);
-	RefreshHand(player, 0xefffff, 0, dp);
-	RefreshGrave(1 - player, 0xefffff, 0, dp);
-	RefreshGrave(player, 0xefffff, 0, dp);
-	RefreshExtra(1 - player, 0xefffff, 0, dp);
-	RefreshExtra(player, 0xefffff, 0, dp);
-	RefreshRemoved(1 - player, 0xefffff, 0, dp);
-	RefreshRemoved(player, 0xefffff, 0, dp);
+	// 先对手槽位（隐藏版本）后自身槽位（明文），与既有刷新顺序一致
+	RefreshMzone(1, 0xefffff, 0, target);
+	RefreshMzone(0, 0xefffff, 0, target);
+	RefreshSzone(1, 0xefffff, 0, target);
+	RefreshSzone(0, 0xefffff, 0, target);
+	RefreshHand(1, 0xefffff, 0, target);
+	RefreshHand(0, 0xefffff, 0, target);
+	RefreshGrave(1, 0xefffff, 0, target);
+	RefreshGrave(0, 0xefffff, 0, target);
+	RefreshExtra(1, 0xefffff, 0, target);
+	RefreshExtra(0, 0xefffff, 0, target);
+	RefreshRemoved(1, 0xefffff, 0, target);
+	RefreshRemoved(0, 0xefffff, 0, target);
 
 	uint8_t query_buffer[SIZE_QUERY_BUFFER];
-		for(uint8_t i = 0; i < 2; ++i) {
+	for(uint8_t i = 0; i < 2; ++i) {
 		// get decktop card
-		auto qlen = query_field_card(pduel, player, i, LOCATION_DECK, QUERY_CODE | QUERY_POSITION, query_buffer, 0);
+		auto qlen = query_field_card(pduel, field, i, LOCATION_DECK, QUERY_CODE | QUERY_POSITION, query_buffer, 0);
 		if(!qlen)
 			continue; // no cards in deck
 		uint8_t *qbuf = query_buffer;
@@ -1713,20 +1735,6 @@ void TagDuel::RequestField(DuelPlayer* dp) {
 				BufferIO::Write<int32_t>(pbuf, code);
 			});
 	}
-
-	/*
-	if(dp == cur_player[last_response])
-		WaitforResponse(last_response);
-	*/
-	STOC_TimeLimit sctl;
-	sctl.player = 1 - last_response;
-	sctl.left_time = time_limit[1 - last_response];
-	NetServer::SendPacketToPlayer(dp, STOC_TIME_LIMIT, sctl);
-	sctl.player = last_response;
-	sctl.left_time = time_limit[last_response] - time_elapsed;
-	NetServer::SendPacketToPlayer(dp, STOC_TIME_LIMIT, sctl);
-
-	NetServer::SendPacketToPlayer(dp, STOC_FIELD_FINISH);
 }
 void TagDuel::TimeConfirm(DuelPlayer* dp) {
 	if(host_info.time_limit == 0)
@@ -1772,13 +1780,14 @@ void TagDuel::RefreshMzone(int player, int flag, int use_cache, DuelPlayer* dp)
 			hidden_segments.emplace_back(qbuf, clen);
 		qbuf += clen - 4;
 	}
-	if(!dp || dp == players[player])
+	// Seat(player) 是内容归属者，只有归属者收明文版本
+	if(!dp || dp == Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		NetServer::ReSendToPlayer(replay_recorder);
 	for(const auto& segment : hidden_segments)
 		std::memset(segment.first, 0, segment.second - 4);
-	if(!dp || dp == players[1 - player])
+	if(!dp || dp != Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(1 - player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
@@ -1805,13 +1814,13 @@ void TagDuel::RefreshSzone(int player, int flag, int use_cache, DuelPlayer* dp)
 			hidden_segments.emplace_back(qbuf, clen);
 		qbuf += clen - 4;
 	}
-	if(!dp || dp == players[player])
+	if(!dp || dp == Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		NetServer::ReSendToPlayer(replay_recorder);
 	for(const auto& segment : hidden_segments)
 		std::memset(segment.first, 0, segment.second - 4);
-	if(!dp || dp == players[1 - player])
+	if(!dp || dp != Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(1 - player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
@@ -1824,7 +1833,7 @@ void TagDuel::RefreshHand(int player, int flag, int use_cache, DuelPlayer* dp)
 	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
 	auto qbuf = query_buffer.data();
 	auto len = WriteUpdateData(player, LOCATION_HAND, flag, qbuf, use_cache);
-	if(!dp || dp == players[player])
+	if(!dp || dp == Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		NetServer::ReSendToPlayer(replay_recorder);
@@ -1839,7 +1848,7 @@ void TagDuel::RefreshHand(int player, int flag, int use_cache, DuelPlayer* dp)
 			std::memset(qbuf, 0, slen - 4);
 		qbuf += slen - 4;
 	}
-	if(!dp || dp == players[1 - player])
+	if(!dp || dp != Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(1 - player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
@@ -1852,9 +1861,9 @@ void TagDuel::RefreshGrave(int player, int flag, int use_cache, DuelPlayer* dp)
 	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
 	auto qbuf = query_buffer.data();
 	auto len = WriteUpdateData(player, LOCATION_GRAVE, flag, qbuf, use_cache);
-	if(!dp || dp == players[player])
+	if(!dp || dp == Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(player), STOC_GAME_MSG, query_buffer.data(), len + 3);
-	if(!dp || dp == players[1 - player])
+	if(!dp || dp != Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(1 - player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
@@ -1867,7 +1876,7 @@ void TagDuel::RefreshExtra(int player, int flag, int use_cache, DuelPlayer* dp)
 	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
 	auto qbuf = query_buffer.data();
 	auto len = WriteUpdateData(player, LOCATION_EXTRA, flag, qbuf, use_cache);
-	if(!dp || dp == players[player])
+	if(!dp || dp == Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		NetServer::ReSendToPlayer(replay_recorder);
@@ -1882,7 +1891,7 @@ void TagDuel::RefreshExtra(int player, int flag, int use_cache, DuelPlayer* dp)
 			memset(qbuf, 0, clen - 4);
 		qbuf += clen - 4;
 	}
-	if(!dp || dp == players[1 - player])
+	if(!dp || dp != Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(1 - player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
@@ -1894,7 +1903,7 @@ void TagDuel::RefreshRemoved(int player, int flag, int use_cache, DuelPlayer* dp
 	std::array<unsigned char, SIZE_QUERY_BUFFER> query_buffer;
 	auto qbuf = query_buffer.data();
 	auto len = WriteUpdateData(player, LOCATION_REMOVED, flag, qbuf, use_cache);
-	if(!dp || dp == players[player])
+	if(!dp || dp == Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		NetServer::ReSendToPlayer(replay_recorder);
@@ -1909,7 +1918,7 @@ void TagDuel::RefreshRemoved(int player, int flag, int use_cache, DuelPlayer* dp
 			memset(qbuf, 0, clen - 4);
 		qbuf += clen - 4;
 	}
-	if(!dp || dp == players[1 - player])
+	if(!dp || dp != Seat(player))
 		NetServer::SendBufferToPlayer(dp ? dp : Seat(1 - player), STOC_GAME_MSG, query_buffer.data(), len + 3);
 	if(!dp)
 		for(auto pit = observers.begin(); pit != observers.end(); ++pit)
